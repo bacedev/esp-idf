@@ -69,6 +69,8 @@ typedef struct esp_tls_cfg {
     unsigned int clientcert_pem_bytes;      /*!< Size of client certificate pointed to by
                                                  clientcert_pem_buf */
 
+    mbedtls_pk_context clientkey;
+    
     const unsigned char *clientkey_pem_buf; /*!< Client key in a buffer
                                                  This buffer should be NULL terminated */
 

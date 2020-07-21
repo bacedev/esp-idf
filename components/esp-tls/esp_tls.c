@@ -322,6 +322,22 @@ static int create_ssl_handle(esp_tls_t *tls, const char *hostname, size_t hostle
             ESP_LOGE(TAG, "mbedtls_ssl_conf_own_cert returned -0x%x\n\n", -ret);
             goto exit;
         }
+
+    } else if (cfg->clientcert_pem_buf != NULL) {
+        mbedtls_x509_crt_init(&tls->clientcert);
+        mbedtls_pk_init(&tls->clientkey);
+        ret = mbedtls_x509_crt_parse(&tls->clientcert, cfg->clientcert_pem_buf, cfg->clientcert_pem_bytes);
+        if (ret < 0) {
+            ESP_LOGE(TAG, "mbedtls_x509_crt_parse returned -0x%x\n\n", -ret);
+            ESP_LOG_BUFFER_HEX(TAG, cfg->clientcert_pem_buf, cfg->clientcert_pem_bytes);
+            goto exit;
+        }
+        tls->clientkey = cfg->clientkey;
+        ret = mbedtls_ssl_conf_own_cert(&tls->conf, &tls->clientcert, &tls->clientkey);
+        if (ret < 0) {
+            ESP_LOGE(TAG, "mbedtls_ssl_conf_own_cert returned -0x%x\n\n", -ret);
+            goto exit;
+        }
     } else if (cfg->clientcert_pem_buf != NULL || cfg->clientkey_pem_buf != NULL) {
         ESP_LOGE(TAG, "You have to provide both clientcert_pem_buf and clientkey_pem_buf for mutual authentication\n\n");
         goto exit;
