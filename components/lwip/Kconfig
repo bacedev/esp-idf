@@ -106,18 +106,31 @@ menu "LWIP"
         help
             Enabling this option allows checking for available data on a netconn.
 
-    config LWIP_IP_FRAG
-        bool "Enable fragment outgoing IP packets"
+    config LWIP_IP4_FRAG
+        bool "Enable fragment outgoing IP4 packets"
         default y
         help
-            Enabling this option allows fragmenting outgoing IP packets if their size
+            Enabling this option allows fragmenting outgoing IP4 packets if their size
             exceeds MTU.
 
-    config LWIP_IP_REASSEMBLY
-        bool "Enable reassembly incoming fragmented IP packets"
+    config LWIP_IP6_FRAG
+        bool "Enable fragment outgoing IP6 packets"
+        default y
+        help
+            Enabling this option allows fragmenting outgoing IP6 packets if their size
+            exceeds MTU.
+
+    config LWIP_IP4_REASSEMBLY
+        bool "Enable reassembly incoming fragmented IP4 packets"
         default n
         help
-            Enabling this option allows reassemblying incoming fragmented IP packets.
+            Enabling this option allows reassemblying incoming fragmented IP4 packets.
+
+    config LWIP_IP6_REASSEMBLY
+        bool "Enable reassembly incoming fragmented IP6 packets"
+        default n
+        help
+            Enabling this option allows reassemblying incoming fragmented IP6 packets.
 
     config LWIP_STATS
         bool "Enable LWIP statistics"
@@ -450,6 +463,13 @@ menu "LWIP"
             default 0
             help
                 Enable this feature to support TCP window scaling.
+
+        config LWIP_TCP_RTO_TIME
+            int "Default TCP rto time"
+            default 3000
+            help
+                Set default TCP rto time for a reasonable initial rto.
+                In bad network environment, recommend set value of rto time to 1500.
 
     endmenu # TCP
 
