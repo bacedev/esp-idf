@@ -305,7 +305,7 @@ void IRAM_ATTR esp_restart_noos()
 
     // Reset timer/spi/uart
     DPORT_SET_PERI_REG_MASK(DPORT_PERIP_RST_EN_REG,
-            DPORT_TIMERS_RST | DPORT_SPI01_RST | DPORT_UART_RST | DPORT_UART1_RST | DPORT_UART2_RST);
+            DPORT_TIMERS_RST | DPORT_SPI01_RST | DPORT_SPI2_RST | DPORT_SPI3_RST | DPORT_SPI_DMA_RST | DPORT_UART_RST | DPORT_UART1_RST | DPORT_UART2_RST);
     DPORT_REG_WRITE(DPORT_PERIP_RST_EN_REG, 0);
 
     // Set CPU back to XTAL source, no PLL, same as hard reset
@@ -383,4 +383,9 @@ void esp_chip_info(esp_chip_info_t* out_info)
         package == EFUSE_RD_CHIP_VER_PKG_ESP32PICOD4) {
         out_info->features |= CHIP_FEATURE_EMB_FLASH;
     }
+}
+
+inline bool soc_has_cache_lock_bug(void)
+{
+    return (esp_efuse_get_chip_ver() == 3);
 }

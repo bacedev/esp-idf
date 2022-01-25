@@ -131,6 +131,12 @@
 #define GATTC_INCLUDED              FALSE
 #endif  /* CONFIG_GATTC_ENABLE */
 
+#if (CONFIG_GATTS_BLUFI_ENABLE)
+#define BLUFI_INCLUDED              TRUE
+#else
+#define BLUFI_INCLUDED              FALSE
+#endif  /* UC_BT_BLUFI_ENABLE */
+
 #if (CONFIG_GATTC_ENABLE && CONFIG_GATTC_CACHE_NVS_FLASH)
 #define GATTC_CACHE_NVS              TRUE
 #else
@@ -1360,7 +1366,7 @@
 
 /* The maximum number of ports supported. */
 #ifndef MAX_RFC_PORTS
-#define MAX_RFC_PORTS               16 /*max is 30*/
+#define MAX_RFC_PORTS               8 /*max is 30*/
 #endif
 
 /* The maximum simultaneous links to different devices. */

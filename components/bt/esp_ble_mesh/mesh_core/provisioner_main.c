@@ -22,6 +22,7 @@
 #include "settings.h"
 #include "friend.h"
 #include "transport.h"
+#include "foundation.h"
 #include "mesh_common.h"
 #include "proxy_client.h"
 #include "provisioner_prov.h"
@@ -35,24 +36,26 @@ static u16_t node_count;
 
 static int provisioner_remove_node(u16_t index, bool erase);
 
-static void bt_mesh_provisioner_mutex_new(void)
+static inline void bt_mesh_provisioner_mutex_new(void)
 {
     if (!provisioner_lock.mutex) {
         bt_mesh_mutex_create(&provisioner_lock);
     }
 }
 
-static void bt_mesh_provisioner_mutex_free(void)
+#if CONFIG_BLE_MESH_DEINIT
+static inline void bt_mesh_provisioner_mutex_free(void)
 {
     bt_mesh_mutex_free(&provisioner_lock);
 }
+#endif /* CONFIG_BLE_MESH_DEINIT */
 
-static void bt_mesh_provisioner_lock(void)
+static inline void bt_mesh_provisioner_lock(void)
 {
     bt_mesh_mutex_lock(&provisioner_lock);
 }
 
-static void bt_mesh_provisioner_unlock(void)
+static inline void bt_mesh_provisioner_unlock(void)
 {
     bt_mesh_mutex_unlock(&provisioner_lock);
 }
@@ -158,32 +161,27 @@ done:
     return 0;
 }
 
+#if CONFIG_BLE_MESH_DEINIT
 int bt_mesh_provisioner_deinit(bool erase)
 {
     int i;
 
-    for (i = 0; i < CONFIG_BLE_MESH_PROVISIONER_SUBNET_COUNT; i++) {
+    for (i = 0; i < ARRAY_SIZE(bt_mesh.p_sub); i++) {
         if (bt_mesh.p_sub[i]) {
-            if (erase && IS_ENABLED(CONFIG_BLE_MESH_SETTINGS)) {
-                bt_mesh_clear_p_subnet(bt_mesh.p_sub[i]);
-            }
-            bt_mesh_free(bt_mesh.p_sub[i]);
-            bt_mesh.p_sub[i] = NULL;
+            bt_mesh_provisioner_local_net_key_del(bt_mesh.p_sub[i]->net_idx, erase);
         }
     }
 
-    for (i = 0; i < CONFIG_BLE_MESH_PROVISIONER_APP_KEY_COUNT; i++) {
-        if (bt_mesh.p_app_keys[i]) {
-            if (erase && IS_ENABLED(CONFIG_BLE_MESH_SETTINGS)) {
-                bt_mesh_clear_p_app_key(bt_mesh.p_app_keys[i]);
-            }
-            bt_mesh_free(bt_mesh.p_app_keys[i]);
-            bt_mesh.p_app_keys[i] = NULL;
-        }
-    }
+    /* Clear model state that isn't otherwise cleared. E.g. AppKey
+     * binding and model publication is cleared as a consequence
+     * of removing all app keys, however model subscription clearing
+     * must be taken care of here.
+     */
+    bt_mesh_mod_sub_reset(erase);
 
     bt_mesh.p_net_idx_next = 0U;
     bt_mesh.p_app_idx_next = 0U;
+
     if (erase && IS_ENABLED(CONFIG_BLE_MESH_SETTINGS)) {
         bt_mesh_clear_p_net_idx();
         bt_mesh_clear_p_app_idx();
@@ -199,6 +197,7 @@ int bt_mesh_provisioner_deinit(bool erase)
 
     return 0;
 }
+#endif /* CONFIG_BLE_MESH_DEINIT */
 
 bool bt_mesh_provisioner_check_is_addr_dup(u16_t addr, u8_t elem_num, bool comp_with_own)
 {
@@ -1027,6 +1026,7 @@ int bt_mesh_provisioner_local_app_key_add(const u8_t app_key[16],
             }
         }
         *app_idx = key->app_idx;
+        bt_mesh.p_app_idx_next++;
     }
     key->updated = false;
 
@@ -1115,7 +1115,7 @@ const u8_t *bt_mesh_provisioner_local_app_key_get(u16_t net_idx, u16_t app_idx)
     return NULL;
 }
 
-static void model_pub_clear(struct bt_mesh_model *model)
+static void model_pub_clear(struct bt_mesh_model *model, bool store)
 {
     if (!model->pub) {
         return;
@@ -1137,14 +1137,14 @@ static void model_pub_clear(struct bt_mesh_model *model)
         k_delayed_work_cancel(&model->pub->timer);
     }
 
-    if (IS_ENABLED(CONFIG_BLE_MESH_SETTINGS)) {
+    if (IS_ENABLED(CONFIG_BLE_MESH_SETTINGS) && store) {
         bt_mesh_store_mod_pub(model);
     }
 
     return;
 }
 
-static void model_unbind(struct bt_mesh_model *model, u16_t app_idx)
+static void model_unbind(struct bt_mesh_model *model, u16_t app_idx, bool store)
 {
     int i;
 
@@ -1157,24 +1157,30 @@ static void model_unbind(struct bt_mesh_model *model, u16_t app_idx)
 
         model->keys[i] = BLE_MESH_KEY_UNUSED;
 
-        if (IS_ENABLED(CONFIG_BLE_MESH_SETTINGS)) {
+        if (IS_ENABLED(CONFIG_BLE_MESH_SETTINGS) && store) {
             bt_mesh_store_mod_bind(model);
         }
 
-        model_pub_clear(model);
+        model_pub_clear(model, store);
     }
 }
+
+struct unbind_data {
+    u16_t app_idx;
+    bool store;
+};
 
 static void _model_unbind(struct bt_mesh_model *mod, struct bt_mesh_elem *elem,
                           bool vnd, bool primary, void *user_data)
 {
-    u16_t app_idx = *(u16_t *)user_data;
+    struct unbind_data *data = user_data;
 
-    model_unbind(mod, app_idx);
+    model_unbind(mod, data->app_idx, data->store);
 }
 
-int bt_mesh_provisioner_local_app_key_delete(u16_t net_idx, u16_t app_idx)
+int bt_mesh_provisioner_local_app_key_del(u16_t net_idx, u16_t app_idx, bool store)
 {
+    struct unbind_data data = { .app_idx = app_idx, .store = store };
     struct bt_mesh_app_key *key = NULL;
     int i;
 
@@ -1195,10 +1201,10 @@ int bt_mesh_provisioner_local_app_key_delete(u16_t net_idx, u16_t app_idx)
         if (key && key->net_idx == net_idx &&
                 key->app_idx == app_idx) {
             /* Remove the AppKey from the models if they are bound with it */
-            bt_mesh_model_foreach(_model_unbind, &app_idx);
+            bt_mesh_model_foreach(_model_unbind, &data);
 
-            if (IS_ENABLED(CONFIG_BLE_MESH_SETTINGS)) {
-                bt_mesh_clear_p_app_key(key);
+            if (IS_ENABLED(CONFIG_BLE_MESH_SETTINGS) && store) {
+                bt_mesh_clear_p_app_key(app_idx);
             }
 
             bt_mesh_free(bt_mesh.p_app_keys[i]);
@@ -1283,6 +1289,7 @@ int bt_mesh_provisioner_local_net_key_add(const u8_t net_key[16], u16_t *net_idx
             }
         }
         *net_idx = sub->net_idx;
+        bt_mesh.p_net_idx_next++;
     }
     sub->kr_phase = BLE_MESH_KR_NORMAL;
     sub->kr_flag  = false;
@@ -1367,7 +1374,7 @@ const u8_t *bt_mesh_provisioner_local_net_key_get(u16_t net_idx)
     return NULL;
 }
 
-int bt_mesh_provisioner_local_net_key_delete(u16_t net_idx)
+int bt_mesh_provisioner_local_net_key_del(u16_t net_idx, bool store)
 {
     struct bt_mesh_subnet *sub = NULL;
     int i, j;
@@ -1385,13 +1392,14 @@ int bt_mesh_provisioner_local_net_key_delete(u16_t net_idx)
             /* Delete any app keys bound to this NetKey index */
             for (j = 0; j < ARRAY_SIZE(bt_mesh.p_app_keys); j++) {
                 struct bt_mesh_app_key *key = bt_mesh.p_app_keys[j];
+
                 if (key && key->net_idx == sub->net_idx) {
-                    bt_mesh_provisioner_local_app_key_delete(key->net_idx, key->app_idx);
+                    bt_mesh_provisioner_local_app_key_del(key->net_idx, key->app_idx, store);
                 }
             }
 
-            if (IS_ENABLED(CONFIG_BLE_MESH_SETTINGS)) {
-                bt_mesh_clear_p_subnet(sub);
+            if (IS_ENABLED(CONFIG_BLE_MESH_SETTINGS) && store) {
+                bt_mesh_clear_p_subnet(net_idx);
             }
 
             bt_mesh_free(bt_mesh.p_sub[i]);
@@ -1535,5 +1543,236 @@ int bt_mesh_provisioner_store_node_info(struct bt_mesh_node *node)
     return 0;
 }
 #endif /* CONFIG_BLE_MESH_TEST_AUTO_ENTER_NETWORK */
+
+#if CONFIG_BLE_MESH_PROVISIONER_RECV_HB
+
+#define HEARTBEAT_FILTER_ACCEPTLIST     0x00
+#define HEARTBEAT_FILTER_REJECTLIST     0x01
+
+#define HEARTBEAT_FILTER_ADD            0x00
+#define HEARTBEAT_FILTER_REMOVE         0x01
+
+#define HEARTBEAT_FILTER_WITH_SRC       BIT(0)
+#define HEARTBEAT_FILTER_WITH_DST       BIT(1)
+#define HEARTBEAT_FILTER_WITH_BOTH      (BIT(1) | BIT(0))
+
+static struct heartbeat_recv {
+    struct heartbeat_filter {
+        u8_t  type; /* Indicate if using src or dst or both to filter heartbeat messages */
+        u16_t src;  /* Heartbeat source address (unicast address) */
+        u16_t dst;  /* Heartbeat destination address (unicast address or group address) */
+    } filter[CONFIG_BLE_MESH_PROVISIONER_RECV_HB_FILTER_SIZE];
+    u8_t  type;     /* Heartbeat filter type */
+    bt_mesh_heartbeat_recv_cb_t cb; /* Heartbeat receive callback */
+} hb_rx;
+
+int bt_mesh_provisioner_recv_heartbeat(bt_mesh_heartbeat_recv_cb_t cb)
+{
+    memset(&hb_rx, 0, sizeof(hb_rx));
+
+    /* Start with an empty rejectlist, which means all heartbeat messages will be reported */
+    hb_rx.type = HEARTBEAT_FILTER_REJECTLIST;
+    hb_rx.cb = cb;
+
+    return 0;
+}
+
+int bt_mesh_provisioner_set_heartbeat_filter_type(u8_t type)
+{
+    if (type > HEARTBEAT_FILTER_REJECTLIST) {
+        BT_ERR("Invalid heartbeat filter type 0x%02x", type);
+        return -EINVAL;
+    }
+
+    /* If the heartbeat filter type is different with previous one,
+     * clear the existing filter entries.
+     */
+    if (hb_rx.type != type) {
+        memset(&hb_rx, 0, offsetof(struct heartbeat_recv, cb));
+        hb_rx.type = type;
+    }
+
+    return 0;
+}
+
+static inline u8_t get_filter_addr_type(u16_t src, u16_t dst)
+{
+    if (BLE_MESH_ADDR_IS_UNICAST(src)) {
+        if (BLE_MESH_ADDR_IS_UNICAST(dst) || BLE_MESH_ADDR_IS_GROUP(dst)) {
+            return HEARTBEAT_FILTER_WITH_BOTH;
+        } else {
+            return HEARTBEAT_FILTER_WITH_SRC;
+        }
+    } else {
+        return HEARTBEAT_FILTER_WITH_DST;
+    }
+}
+
+static int hb_filter_alloc(u16_t src, u16_t dst)
+{
+    int i;
+
+    for (i = 0; i < ARRAY_SIZE(hb_rx.filter); i++) {
+        struct heartbeat_filter *filter = &hb_rx.filter[i];
+
+        if (filter->src == BLE_MESH_ADDR_UNASSIGNED &&
+            filter->dst == BLE_MESH_ADDR_UNASSIGNED) {
+            filter->type = get_filter_addr_type(src, dst);
+            filter->src = src;
+            filter->dst = dst;
+            return 0;
+        }
+    }
+
+    BT_ERR("Heartbeat filter is full!");
+    return -ENOMEM;
+}
+
+static int hb_filter_add(u16_t src, u16_t dst)
+{
+    int i;
+
+    if (!BLE_MESH_ADDR_IS_UNICAST(src) &&
+        !BLE_MESH_ADDR_IS_UNICAST(dst) && !BLE_MESH_ADDR_IS_GROUP(dst)) {
+        BT_ERR("Invalid filter address, src 0x%04x, dst 0x%04x", src, dst);
+        return -EINVAL;
+    }
+
+    /* Check if filter entries with the same src or dst exist. */
+    for (i = 0; i < ARRAY_SIZE(hb_rx.filter); i++) {
+        struct heartbeat_filter *filter = &hb_rx.filter[i];
+
+        if ((BLE_MESH_ADDR_IS_UNICAST(src) && filter->src == src) ||
+            ((BLE_MESH_ADDR_IS_UNICAST(dst) || BLE_MESH_ADDR_IS_GROUP(dst)) &&
+            filter->dst == dst)) {
+            memset(filter, 0, sizeof(struct heartbeat_filter));
+        }
+    }
+
+    return hb_filter_alloc(src, dst);
+}
+
+static int hb_filter_remove(u16_t src, u16_t dst)
+{
+    int i;
+
+    if (!BLE_MESH_ADDR_IS_UNICAST(src) &&
+        !BLE_MESH_ADDR_IS_UNICAST(dst) && !BLE_MESH_ADDR_IS_GROUP(dst)) {
+        BT_ERR("Invalid filter address, src 0x%04x, dst 0x%04x", src, dst);
+        return -EINVAL;
+    }
+
+    for (i = 0; i < ARRAY_SIZE(hb_rx.filter); i++) {
+        struct heartbeat_filter *filter = &hb_rx.filter[i];
+
+        if ((BLE_MESH_ADDR_IS_UNICAST(src) && filter->src == src) ||
+            ((BLE_MESH_ADDR_IS_UNICAST(dst) || BLE_MESH_ADDR_IS_GROUP(dst)) &&
+            filter->dst == dst)) {
+            memset(filter, 0, sizeof(struct heartbeat_filter));
+        }
+    }
+
+    return 0;
+}
+
+int bt_mesh_provisioner_set_heartbeat_filter_info(u8_t op, u16_t src, u16_t dst)
+{
+    switch (op) {
+    case HEARTBEAT_FILTER_ADD:
+        return hb_filter_add(src, dst);
+    case HEARTBEAT_FILTER_REMOVE:
+        return hb_filter_remove(src, dst);
+    default:
+        BT_ERR("Invalid heartbeat filter opcode 0x%02x", op);
+        return -EINVAL;
+    }
+}
+
+static bool filter_with_rejectlist(struct heartbeat_filter *filter,
+                                   u16_t hb_src, u16_t hb_dst)
+{
+    switch (filter->type) {
+    case HEARTBEAT_FILTER_WITH_SRC:
+        if (hb_src == filter->src) {
+            return true;
+        }
+        break;
+    case HEARTBEAT_FILTER_WITH_DST:
+        if (hb_dst == filter->dst) {
+            return true;
+        }
+        break;
+    case HEARTBEAT_FILTER_WITH_BOTH:
+        if (hb_src == filter->src && hb_dst == filter->dst) {
+            return true;
+        }
+        break;
+    default:
+        BT_WARN("Unknown filter addr type 0x%02x", filter->type);
+        break;
+    }
+
+    return false;
+}
+
+static bool filter_with_acceptlist(struct heartbeat_filter *filter,
+                                   u16_t hb_src, u16_t hb_dst)
+{
+    switch (filter->type) {
+    case HEARTBEAT_FILTER_WITH_SRC:
+        if (hb_src == filter->src) {
+            return false;
+        }
+        break;
+    case HEARTBEAT_FILTER_WITH_DST:
+        if (hb_dst == filter->dst) {
+            return false;
+        }
+        break;
+    case HEARTBEAT_FILTER_WITH_BOTH:
+        if (hb_src == filter->src && hb_dst == filter->dst) {
+            return false;
+        }
+        break;
+    default:
+        BT_WARN("Unknown filter addr type 0x%02x", filter->type);
+        return false;
+    }
+
+    return true;
+}
+
+void bt_mesh_provisioner_heartbeat(u16_t hb_src, u16_t hb_dst,
+                                   u8_t init_ttl, u8_t rx_ttl,
+                                   u8_t hops, u16_t feat, s8_t rssi)
+{
+    int i;
+
+    if (hb_rx.cb == NULL) {
+        BT_DBG("Receiving heartbeat is not enabled");
+        return;
+    }
+
+    for (i = 0; i < ARRAY_SIZE(hb_rx.filter); i++) {
+        struct heartbeat_filter *filter = &hb_rx.filter[i];
+
+        if (hb_rx.type == HEARTBEAT_FILTER_REJECTLIST) {
+            if (filter_with_rejectlist(filter, hb_src, hb_dst)) {
+                BT_DBG("Filtered by rejectlist, src 0x%04x, dst 0x%04x", hb_src, hb_dst);
+                return;
+            }
+        } else {
+            if (filter_with_acceptlist(filter, hb_src, hb_dst)) {
+                BT_DBG("Filtered by acceptlist, src 0x%04x, dst 0x%04x", hb_src, hb_dst);
+                return;
+            }
+        }
+    }
+
+    if (hb_rx.cb) {
+        hb_rx.cb(hb_src, hb_dst, init_ttl, rx_ttl, hops, feat, rssi);
+    }
+}
+#endif /* CONFIG_BLE_MESH_PROVISIONER_RECV_HB */
 
 #endif /* CONFIG_BLE_MESH_PROVISIONER */
