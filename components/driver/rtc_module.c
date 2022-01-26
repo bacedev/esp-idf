@@ -48,12 +48,12 @@
 
 
 #define ADC_FSM_RSTB_WAIT_DEFAULT     (8)
-#define ADC_FSM_START_WAIT_DEFAULT    (5)
+#define ADC_FSM_START_WAIT_DEFAULT    (SAR_ADC_CLK_DIV_DEFUALT * 2)
 #define ADC_FSM_STANDBY_WAIT_DEFAULT  (100)
 #define ADC_FSM_TIME_KEEP             (-1)
 #define ADC_MAX_MEAS_NUM_DEFAULT      (255)
 #define ADC_MEAS_NUM_LIM_DEFAULT      (1)
-#define SAR_ADC_CLK_DIV_DEFUALT       (2)
+#define SAR_ADC_CLK_DIV_DEFUALT       (16)
 #define ADC_PATT_LEN_MAX              (16)
 #define TOUCH_PAD_FILTER_FACTOR_DEFAULT   (4)   // IIR filter coefficient.
 #define TOUCH_PAD_SHIFT_DEFAULT           (4)   // Increase computing accuracy.
@@ -1153,34 +1153,24 @@ static esp_err_t adc_set_atten(adc_unit_t adc_unit, adc_channel_t channel, adc_a
 
 void adc_power_acquire()
 {
-    bool powered_on = false;
     portENTER_CRITICAL(&rtc_spinlock);
     s_adc_power_on_cnt++;
     if (s_adc_power_on_cnt == 1) {
         adc_power_on_internal();
-        powered_on = true;
     }
     portEXIT_CRITICAL(&rtc_spinlock);
-    if (powered_on) {
-        ESP_LOGV(TAG, "%s: ADC powered on", __func__);
-    }
 }
 
 void adc_power_release(void)
 {
-    bool powered_off = false;
     portENTER_CRITICAL(&rtc_spinlock);
     s_adc_power_on_cnt--;
     if (s_adc_power_on_cnt < 0) {
         portEXIT_CRITICAL(&rtc_spinlock);
     } else if (s_adc_power_on_cnt == 0) {
         adc_power_off_internal();
-        powered_off = true;
     }
     portEXIT_CRITICAL(&rtc_spinlock);
-    if (powered_off) {
-        ESP_LOGV(TAG, "%s: ADC powered off", __func__);
-    }
 }
 
 static void adc_power_on_internal(void)

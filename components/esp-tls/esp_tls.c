@@ -82,6 +82,34 @@ static void ms_to_timeval(int timeout_ms, struct timeval *tv)
     tv->tv_usec = (timeout_ms % 1000) * 1000;
 }
 
+static int esp_tls_tcp_enable_keep_alive(int fd, tls_keep_alive_cfg_t *cfg)
+{
+    int keep_alive_enable = 1;
+    int keep_alive_idle = cfg->keep_alive_idle;
+    int keep_alive_interval = cfg->keep_alive_interval;
+    int keep_alive_count = cfg->keep_alive_count;
+
+    ESP_LOGD(TAG, "Enable TCP keep alive. idle: %d, interval: %d, count: %d", keep_alive_idle, keep_alive_interval, keep_alive_count);
+    if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &keep_alive_enable, sizeof(keep_alive_enable)) != 0) {
+        ESP_LOGE(TAG, "Fail to setsockopt SO_KEEPALIVE");
+        return -1;
+    }
+    if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &keep_alive_idle, sizeof(keep_alive_idle)) != 0) {
+        ESP_LOGE(TAG, "Fail to setsockopt TCP_KEEPIDLE");
+        return -1;
+    }
+    if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &keep_alive_interval, sizeof(keep_alive_interval)) != 0) {
+        ESP_LOGE(TAG, "Fail to setsockopt TCP_KEEPINTVL");
+        return -1;
+    }
+    if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &keep_alive_count, sizeof(keep_alive_count)) != 0) {
+        ESP_LOGE(TAG, "Fail to setsockopt TCP_KEEPCNT");
+        return -1;
+    }
+
+    return 0;
+}
+
 static int esp_tcp_connect(const char *host, int hostlen, int port, int *sockfd, const esp_tls_cfg_t *cfg)
 {
     int ret = -1;
@@ -117,6 +145,12 @@ static int esp_tcp_connect(const char *host, int hostlen, int port, int *sockfd,
             ms_to_timeval(cfg->timeout_ms, &tv);
             setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
             setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+            if (cfg->keep_alive_cfg && cfg->keep_alive_cfg->keep_alive_enable) {
+                if (esp_tls_tcp_enable_keep_alive(fd, cfg->keep_alive_cfg) < 0) {
+                    ESP_LOGE(TAG, "Error setting keep-alive");
+                    goto err_freesocket;
+                }
+            }
         }
         if (cfg->non_block) {
             int flags = fcntl(fd, F_GETFL, 0);
@@ -291,6 +325,11 @@ static int create_ssl_handle(esp_tls_t *tls, const char *hostname, size_t hostle
         if (ret < 0) {
             ESP_LOGE(TAG, "mbedtls_x509_crt_parse returned -0x%x\n\n", -ret);
             goto exit;
+        }
+        if (ret > 0) {
+            /* This will happen if the CA chain contains one or more invalid certs, going ahead as the hadshake
+            * may still succeed if the other certificates in the CA chain are enough for the authentication */
+            ESP_LOGW(TAG, "mbedtls_x509_crt_parse was partly successful. No. of failed certificates: %d", ret);
         }
         mbedtls_ssl_conf_authmode(&tls->conf, MBEDTLS_SSL_VERIFY_REQUIRED);
         mbedtls_ssl_conf_ca_chain(&tls->conf, tls->cacert_ptr, NULL);

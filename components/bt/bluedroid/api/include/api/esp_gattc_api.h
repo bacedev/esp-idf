@@ -209,6 +209,7 @@ typedef union {
     struct gattc_connect_evt_param {
         uint16_t conn_id;               /*!< Connection id */
         esp_bd_addr_t remote_bda;       /*!< Remote bluetooth device address */
+        esp_gatt_conn_params_t conn_params; /*!< current connection parameters */
     } connect;                          /*!< Gatt client callback param of ESP_GATTC_CONNECT_EVT */
 
     /**
@@ -248,7 +249,7 @@ typedef union {
 /**
  * @brief GATT Client callback function type
  * @param event : Event type
- * @param gatts_if : GATT client access interface, normally
+ * @param gattc_if : GATT client access interface, normally
  *                   different gattc_if correspond to different profile
  * @param param : Point to callback parameter, currently is union type
  */

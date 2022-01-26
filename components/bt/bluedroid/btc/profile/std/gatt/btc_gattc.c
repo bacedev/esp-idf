@@ -121,14 +121,14 @@ static void btc_gattc_copy_req_data(btc_msg_t *msg, void *p_dest, void *p_src)
     tBTA_GATTC *p_dest_data = (tBTA_GATTC *) p_dest;
     tBTA_GATTC *p_src_data = (tBTA_GATTC *) p_src;
 
-    if (!p_src_data || !p_dest_data) {
+    if (!p_src_data || !p_dest_data || !msg) {
         return;
     }
 
     // Allocate buffer for request data if necessary
     switch (msg->act) {
         case BTA_GATTC_READ_DESCR_EVT:
-        case BTA_GATTC_READ_CHAR_EVT: 
+        case BTA_GATTC_READ_CHAR_EVT:
         case BTA_GATTC_READ_MULTIPLE_EVT: {
             if (p_src_data->read.p_value && p_src_data->read.p_value->p_value) {
                 p_dest_data->read.p_value = (tBTA_GATT_UNFMT  *)osi_malloc(sizeof(tBTA_GATT_UNFMT) + p_src_data->read.p_value->len);
@@ -164,7 +164,7 @@ static void btc_gattc_free_req_data(btc_msg_t *msg)
     tBTA_GATTC *arg = (tBTA_GATTC *)(msg->arg);
     switch (msg->act) {
         case BTA_GATTC_READ_DESCR_EVT:
-        case BTA_GATTC_READ_CHAR_EVT: 
+        case BTA_GATTC_READ_CHAR_EVT:
         case BTA_GATTC_READ_MULTIPLE_EVT: {
             if (arg->read.p_value) {
                 osi_free(arg->read.p_value);
@@ -186,7 +186,7 @@ static void btc_gattc_free_req_data(btc_msg_t *msg)
 static void btc_gattc_cback(tBTA_GATTC_EVT event, tBTA_GATTC *p_data)
 {
     bt_status_t ret;
-    btc_msg_t msg;
+    btc_msg_t msg= {0};
 
     msg.sig = BTC_SIG_API_CB;
     msg.pid = BTC_PID_GATTC;
@@ -909,6 +909,9 @@ void btc_gattc_cb_handler(btc_msg_t *msg)
         gattc_if = connect->client_if;
         param.connect.conn_id = BTC_GATT_GET_CONN_ID(connect->conn_id);
         memcpy(param.connect.remote_bda, connect->remote_bda, sizeof(esp_bd_addr_t));
+        param.connect.conn_params.interval = connect->conn_params.interval;
+        param.connect.conn_params.latency = connect->conn_params.latency;
+        param.connect.conn_params.timeout = connect->conn_params.timeout;
         btc_gattc_cb_to_app(ESP_GATTC_CONNECT_EVT, gattc_if, &param);
         break;
     }

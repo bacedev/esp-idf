@@ -44,7 +44,7 @@ static const char* TAG = "system_api";
 
 static uint8_t base_mac_addr[6] = { 0 };
 
-#define SHUTDOWN_HANDLERS_NO 2
+#define SHUTDOWN_HANDLERS_NO 3
 static shutdown_handler_t shutdown_handlers[SHUTDOWN_HANDLERS_NO];
 
 void system_init()
@@ -305,7 +305,7 @@ void IRAM_ATTR esp_restart_noos()
 
     // Reset timer/spi/uart
     DPORT_SET_PERI_REG_MASK(DPORT_PERIP_RST_EN_REG,
-            DPORT_TIMERS_RST | DPORT_SPI01_RST | DPORT_SPI2_RST | DPORT_SPI3_RST | DPORT_SPI_DMA_RST | DPORT_UART_RST | DPORT_UART1_RST | DPORT_UART2_RST);
+            DPORT_TIMERS_RST | DPORT_SPI01_RST | DPORT_SPI2_RST | DPORT_SPI3_RST | DPORT_SPI_DMA_RST | DPORT_UART_RST | DPORT_UART1_RST | DPORT_UART2_RST  | DPORT_UART_MEM_RST);
     DPORT_REG_WRITE(DPORT_PERIP_RST_EN_REG, 0);
 
     // Set CPU back to XTAL source, no PLL, same as hard reset
@@ -380,7 +380,8 @@ void esp_chip_info(esp_chip_info_t* out_info)
     int package = (efuse_rd3 & EFUSE_RD_CHIP_VER_PKG_M) >> EFUSE_RD_CHIP_VER_PKG_S;
     if (package == EFUSE_RD_CHIP_VER_PKG_ESP32D2WDQ5 ||
         package == EFUSE_RD_CHIP_VER_PKG_ESP32PICOD2 ||
-        package == EFUSE_RD_CHIP_VER_PKG_ESP32PICOD4) {
+        package == EFUSE_RD_CHIP_VER_PKG_ESP32PICOD4 ||
+        package == EFUSE_RD_CHIP_VER_PKG_ESP32PICOV302) {
         out_info->features |= CHIP_FEATURE_EMB_FLASH;
     }
 }

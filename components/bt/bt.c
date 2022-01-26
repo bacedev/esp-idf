@@ -239,7 +239,6 @@ extern uint8_t coex_schm_curr_period_get(void);
 extern void * coex_schm_curr_phase_get(void);
 extern int coex_wifi_channel_get(uint8_t *primary, uint8_t *secondary);
 extern int coex_register_wifi_channel_change_callback(void *cb);
-extern void coex_ble_adv_priority_high_set(bool high);
 
 extern char _bss_start_btdm;
 extern char _bss_end_btdm;
@@ -1107,7 +1106,7 @@ static uint8_t coex_schm_curr_period_get_wrapper(void)
 #if CONFIG_SW_COEXIST_ENABLE
     return coex_schm_curr_period_get();
 #else
-    return 0;
+    return 1;
 #endif
 }
 
@@ -1125,13 +1124,7 @@ static int coex_wifi_channel_get_wrapper(uint8_t *primary, uint8_t *secondary)
 #if CONFIG_SW_COEXIST_ENABLE
     return coex_wifi_channel_get(primary, secondary);
 #else
-    if (primary == NULL || secondary == NULL) {
-        return -1;
-    }
-
-    *primary = 0;
-    *secondary = 0;
-    return 0;
+    return -1;
 #endif
 }
 
@@ -1140,7 +1133,7 @@ static int coex_register_wifi_channel_change_callback_wrapper(void *cb)
 #if CONFIG_SW_COEXIST_ENABLE
     return coex_register_wifi_channel_change_callback(cb);
 #else
-    return 0;
+    return -1;
 #endif
 }
 
@@ -1436,12 +1429,6 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg)
         goto error;
     }
 
-#ifdef CONFIG_BTDM_COEX_BLE_ADV_HIGH_PRIORITY
-    coex_ble_adv_priority_high_set(true);
-#else
-    coex_ble_adv_priority_high_set(false);
-#endif
-
     btdm_controller_status = ESP_BT_CONTROLLER_STATUS_INITED;
 
     return ESP_OK;
@@ -1507,6 +1494,21 @@ esp_err_t esp_bt_controller_deinit(void)
     return ESP_OK;
 }
 
+
+static void bt_shutdown(void)
+{
+    esp_err_t ret = ESP_OK;
+    ESP_LOGD(BTDM_LOG_TAG, "stop Bluetooth");
+
+    ret = esp_bt_controller_disable();
+    if (ESP_OK != ret) {
+        ESP_LOGW(BTDM_LOG_TAG, "controller disable ret=%d", ret);
+    }
+    ret = esp_bt_controller_deinit();
+    return;
+}
+
+
 esp_err_t esp_bt_controller_enable(esp_bt_mode_t mode)
 {
     int ret;
@@ -1566,6 +1568,10 @@ esp_err_t esp_bt_controller_enable(esp_bt_mode_t mode)
     }
 
     btdm_controller_status = ESP_BT_CONTROLLER_STATUS_ENABLED;
+    ret = esp_register_shutdown_handler(bt_shutdown);
+    if (ret != ESP_OK) {
+        ESP_LOGW(BTDM_LOG_TAG, "Register shutdown handler failed, ret = 0x%x", ret);
+    }
 
     return ESP_OK;
 }

@@ -855,6 +855,8 @@ BOOLEAN BTM_BleConfigPrivacy(BOOLEAN privacy_mode, tBTM_SET_LOCAL_PRIVACY_CBACK 
             (*random_cb->set_local_privacy_cback)(BTM_SET_PRIVACY_SUCCESS);
             random_cb->set_local_privacy_cback = NULL;
         }
+        //Disable RPA function
+        btsnd_hcic_ble_set_addr_resolution_enable(FALSE);
     } else { /* privacy is turned on*/
         /* always set host random address, used when privacy 1.1 or priavcy 1.2 is disabled */
         btm_gen_resolvable_private_addr((void *)btm_gen_resolve_paddr_low);
@@ -873,6 +875,7 @@ BOOLEAN BTM_BleConfigPrivacy(BOOLEAN privacy_mode, tBTM_SET_LOCAL_PRIVACY_CBACK 
         } else { /* 4.1/4.0 controller */
             p_cb->privacy_mode = BTM_PRIVACY_1_1;
         }
+        btsnd_hcic_ble_set_addr_resolution_enable(TRUE);
     }
 
 #if (defined(GAP_INCLUDED) && GAP_INCLUDED == TRUE && GATTS_INCLUDED == TRUE)
@@ -1385,6 +1388,8 @@ tBTM_STATUS BTM_BleSetAdvParamsAll(UINT16 adv_int_min, UINT16 adv_int_max, UINT8
 
     if (p_dir_bda) {
         memcpy(&p_cb->direct_bda, p_dir_bda, sizeof(tBLE_BD_ADDR));
+    } else {
+        return BTM_ILLEGAL_VALUE;
     }
 
     BTM_TRACE_EVENT ("update params for an active adv\n");
@@ -1711,8 +1716,10 @@ tBTM_STATUS BTM_UpdateBleDuplicateExceptionalList(uint8_t subcode, uint32_t type
                                                 tBTM_UPDATE_DUPLICATE_EXCEPTIONAL_LIST_CMPL_CBACK update_exceptional_list_cmp_cb)
 {
     tBTM_BLE_CB *ble_cb = &btm_cb.ble_ctr_cb;
-    ble_cb->update_exceptional_list_cmp_cb = update_exceptional_list_cmp_cb;
     tBTM_STATUS status = BTM_NO_RESOURCES;
+
+    ble_cb->update_exceptional_list_cmp_cb = update_exceptional_list_cmp_cb;
+
     if (!controller_get_interface()->supports_ble()) {
         return BTM_ILLEGAL_VALUE;
     }
@@ -1746,9 +1753,6 @@ tBTM_STATUS BTM_UpdateBleDuplicateExceptionalList(uint8_t subcode, uint32_t type
         default:
             //do nothing
             break;
-    }
-    if(status == BTM_ILLEGAL_VALUE) {
-        return status;
     }
 
     status = BTM_VendorSpecificCommand(HCI_VENDOR_BLE_UPDATE_DUPLICATE_EXCEPTIONAL_LIST, 1 + 4 + BD_ADDR_LEN, device_info_array, NULL);
@@ -2037,6 +2041,31 @@ void BTM_Recovery_Pre_State(void)
     }
 
     return;
+}
+
+/*******************************************************************************
+**
+** Function         BTM_GetCurrentConnParams
+**
+** Description      This function is called to read the current connection parameters
+**                  of the device
+**
+** Returns          TRUE or FALSE
+**
+*******************************************************************************/
+
+BOOLEAN BTM_GetCurrentConnParams(BD_ADDR bda, uint16_t *interval, uint16_t *latency, uint16_t *timeout)
+{
+    if( (interval == NULL) || (latency == NULL) || (timeout == NULL) ) {
+        BTM_TRACE_ERROR("%s error ", __func__);
+        return FALSE;
+    }
+
+    if(btm_get_current_conn_params(bda, interval, latency, timeout)) {
+        return TRUE;
+    }
+
+    return FALSE;
 }
 
 /*******************************************************************************
@@ -2924,7 +2953,6 @@ void btm_ble_cache_adv_data(BD_ADDR bda, tBTM_INQ_RESULTS *p_cur, UINT8 data_len
 {
     tBTM_BLE_INQ_CB     *p_le_inq_cb = &btm_cb.ble_ctr_cb.inq_var;
     UINT8 *p_cache;
-    UINT8 length;
 
     /* cache adv report/scan response data */
     if (evt_type != BTM_BLE_SCAN_RSP_EVT) {
@@ -2945,17 +2973,12 @@ void btm_ble_cache_adv_data(BD_ADDR bda, tBTM_INQ_RESULTS *p_cur, UINT8 data_len
 
     if (data_len > 0) {
         p_cache = &p_le_inq_cb->adv_data_cache[p_le_inq_cb->adv_len];
-        STREAM_TO_UINT8(length, p);
-        while ( length && ((p_le_inq_cb->adv_len + length + 1) <= BTM_BLE_CACHE_ADV_DATA_MAX)) {
-            /* copy from the length byte & data into cache */
-            memcpy(p_cache, p - 1, length + 1);
-            /* advance the cache pointer past data */
-            p_cache += length + 1;
-            /* increment cache length */
-            p_le_inq_cb->adv_len += length + 1;
-            /* skip the length of data */
-            p += length;
-            STREAM_TO_UINT8(length, p);
+        if((data_len + p_le_inq_cb->adv_len) <= BTM_BLE_CACHE_ADV_DATA_MAX) {
+
+            memcpy(p_cache, p, data_len);
+
+            p_le_inq_cb->adv_len += data_len;
+
         }
     }
 

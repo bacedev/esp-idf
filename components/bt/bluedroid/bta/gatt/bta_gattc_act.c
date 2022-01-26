@@ -488,9 +488,14 @@ void bta_gattc_open(tBTA_GATTC_CLCB *p_clcb, tBTA_GATTC_DATA *p_data)
 {
     tBTA_GATTC_DATA gattc_data;
     BOOLEAN found_app = FALSE;
+    tGATT_TCB *p_tcb;
 
-    tGATT_TCB *p_tcb = gatt_find_tcb_by_addr(p_data->api_conn.remote_bda, BT_TRANSPORT_LE);
-    if(p_tcb && p_clcb && p_data) {
+    if (!p_clcb || !p_data) {
+        return;
+    }
+
+    p_tcb = gatt_find_tcb_by_addr(p_data->api_conn.remote_bda, BT_TRANSPORT_LE);
+    if(p_tcb) {
         found_app = gatt_find_specific_app_in_hold_link(p_tcb, p_clcb->p_rcb->client_if);
     }
     /* open/hold a connection */
@@ -729,7 +734,7 @@ void bta_gattc_conncback(tBTA_GATTC_RCB *p_rcb, tBTA_GATTC_DATA *p_data)
     if (p_rcb) {
         bta_gattc_send_connect_cback(p_rcb,
                                      p_data->int_conn.remote_bda,
-                                     p_data->int_conn.hdr.layer_specific);
+                                     p_data->int_conn.hdr.layer_specific, p_data->int_conn.conn_params);
 
     }
 }
@@ -1152,7 +1157,7 @@ void bta_gattc_read_multi(tBTA_GATTC_CLCB *p_clcb, tBTA_GATTC_DATA *p_data)
             read_param.read_multiple.num_handles = p_data->api_read_multi.num_attr;
             read_param.read_multiple.auth_req = p_data->api_read_multi.auth_req;
             memcpy(&read_param.read_multiple.handles, p_data->api_read_multi.handles,
-                                        sizeof(UINT16) * p_data->api_read_multi.num_attr);
+                    sizeof(UINT16) * p_data->api_read_multi.num_attr);
 
             status = GATTC_Read(p_clcb->bta_conn_id, GATT_READ_MULTIPLE, &read_param);
         }
@@ -1686,6 +1691,16 @@ static void bta_gattc_conn_cback(tGATT_IF gattc_if, BD_ADDR bda, UINT16 conn_id,
 
         p_buf->int_conn.hdr.event            = connected ? BTA_GATTC_INT_CONN_EVT :
                                                BTA_GATTC_INT_DISCONN_EVT;
+        if(p_buf->int_conn.hdr.event == BTA_GATTC_INT_CONN_EVT) {
+            tL2C_LCB *p_lcb = l2cu_find_lcb_by_bd_addr(bda, BT_TRANSPORT_LE);
+            if(p_lcb != NULL) {
+                p_buf->int_conn.conn_params.interval = p_lcb->current_used_conn_interval;
+                p_buf->int_conn.conn_params.latency = p_lcb->current_used_conn_latency;
+                p_buf->int_conn.conn_params.timeout = p_lcb->current_used_conn_timeout;
+            } else {
+                APPL_TRACE_WARNING("%s not found connection parameters of the device ", __func__);
+            }
+        } 
         p_buf->int_conn.hdr.layer_specific   = conn_id;
         p_buf->int_conn.client_if            = gattc_if;
         p_buf->int_conn.role                 = L2CA_GetBleConnRole(bda);

@@ -800,7 +800,7 @@ BOOLEAN BTM_UseLeLink (BD_ADDR bd_addr)
 {
     tACL_CONN         *p;
     tBT_DEVICE_TYPE     dev_type;
-    tBLE_ADDR_TYPE      addr_type;
+    tBLE_ADDR_TYPE      addr_type = 0;
     BOOLEAN             use_le = FALSE;
 
     if ((p = btm_bda_to_acl(bd_addr, BT_TRANSPORT_BR_EDR)) != NULL) {
@@ -827,6 +827,7 @@ BOOLEAN BTM_UseLeLink (BD_ADDR bd_addr)
 tBTM_STATUS BTM_SetBleDataLength(BD_ADDR bd_addr, UINT16 tx_pdu_length)
 {
     tACL_CONN *p_acl = btm_bda_to_acl(bd_addr, BT_TRANSPORT_LE);
+
     BTM_TRACE_DEBUG("%s: tx_pdu_length =%d", __FUNCTION__, tx_pdu_length);
 
     if (!controller_get_interface()->supports_ble_packet_extension()) {
@@ -834,12 +835,12 @@ tBTM_STATUS BTM_SetBleDataLength(BD_ADDR bd_addr, UINT16 tx_pdu_length)
         return BTM_CONTROL_LE_DATA_LEN_UNSUPPORTED;
     }
 
-    if (!HCI_LE_DATA_LEN_EXT_SUPPORTED(p_acl->peer_le_features)) {
-        BTM_TRACE_ERROR("%s failed, peer does not support request", __FUNCTION__);
-        return BTM_PEER_LE_DATA_LEN_UNSUPPORTED;
-    }
-
     if (p_acl != NULL) {
+        if (!HCI_LE_DATA_LEN_EXT_SUPPORTED(p_acl->peer_le_features)) {
+            BTM_TRACE_ERROR("%s failed, peer does not support request", __FUNCTION__);
+            return BTM_PEER_LE_DATA_LEN_UNSUPPORTED;
+        }
+
         if (tx_pdu_length > BTM_BLE_DATA_SIZE_MAX) {
             tx_pdu_length =  BTM_BLE_DATA_SIZE_MAX;
         } else if (tx_pdu_length < BTM_BLE_DATA_SIZE_MIN) {
@@ -1961,7 +1962,7 @@ void btm_ble_conn_complete(UINT8 *p, UINT16 evt_len, BOOLEAN enhanced)
         * slave or master*/
 
         /* if (!match && role == HCI_ROLE_SLAVE && BTM_BLE_IS_RESOLVE_BDA(bda)) { */
-        if (!match && BTM_BLE_IS_RESOLVE_BDA(bda)) {
+        if (!match && bda_type != BLE_ADDR_PUBLIC && BTM_BLE_IS_RESOLVE_BDA(bda)) {
             // save the enhanced value to used in btm_ble_resolve_random_addr_on_conn_cmpl func.
             temp_enhanced = enhanced;
             btm_ble_resolve_random_addr(bda, btm_ble_resolve_random_addr_on_conn_cmpl, p_data);
@@ -2727,5 +2728,36 @@ void btm_ble_set_keep_rfu_in_auth_req(BOOLEAN keep_rfu)
 }
 
 #endif /* BTM_BLE_CONFORMANCE_TESTING */
+
+/*******************************************************************************
+**
+** Function         btm_get_current_conn_params
+**
+** Description      This function is called to get current connection parameters
+**                  information of the device           
+**
+** Returns          TRUE if the information is geted, else FALSE
+**
+*******************************************************************************/
+
+BOOLEAN btm_get_current_conn_params(BD_ADDR bda, UINT16 *interval, UINT16 *latency, UINT16 *timeout)
+{
+    if( (interval == NULL) || (latency == NULL) || (timeout == NULL) ) {
+        BTM_TRACE_ERROR("%s invalid parameters ", __func__);
+        return FALSE;
+    }
+
+    tL2C_LCB *p_lcb = l2cu_find_lcb_by_bd_addr(bda, BT_TRANSPORT_LE);
+    if(p_lcb != NULL) {
+         (*interval) = p_lcb->current_used_conn_interval;
+         (*latency) = p_lcb->current_used_conn_latency;
+         (*timeout) = p_lcb->current_used_conn_timeout;
+        return TRUE;
+    }
+    BTM_TRACE_WARNING("%s Device is not connected", __func__);
+    
+    return FALSE;
+}
+
 
 #endif /* BLE_INCLUDED */
