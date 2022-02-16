@@ -206,10 +206,26 @@ static int http_on_status(http_parser *parser, const char *at, size_t length)
     return 0;
 }
 
+static int http_on_header_event(esp_http_client_handle_t client)
+{
+    if (client->current_header_key != NULL && client->current_header_value != NULL) {
+        ESP_LOGD(TAG, "HEADER=%s:%s", client->current_header_key, client->current_header_value);
+        client->event.header_key = client->current_header_key;
+        client->event.header_value = client->current_header_value;
+        http_dispatch_event(client, HTTP_EVENT_ON_HEADER, NULL, 0);
+        free(client->current_header_key);
+        free(client->current_header_value);
+        client->current_header_key = NULL;
+        client->current_header_value = NULL;
+    }
+    return 0;
+}
+
 static int http_on_header_field(http_parser *parser, const char *at, size_t length)
 {
     esp_http_client_t *client = parser->data;
-    http_utils_assign_string(&client->current_header_key, at, length);
+    http_on_header_event(client);
+    http_utils_append_string(&client->current_header_key, at, length);
 
     return 0;
 }
@@ -221,35 +237,34 @@ static int http_on_header_value(http_parser *parser, const char *at, size_t leng
         return 0;
     }
     if (strcasecmp(client->current_header_key, "Location") == 0) {
-        http_utils_assign_string(&client->location, at, length);
+        http_utils_append_string(&client->location, at, length);
     } else if (strcasecmp(client->current_header_key, "Transfer-Encoding") == 0
                && memcmp(at, "chunked", length) == 0) {
         client->response->is_chunked = true;
     } else if (strcasecmp(client->current_header_key, "WWW-Authenticate") == 0) {
-        http_utils_assign_string(&client->auth_header, at, length);
+        http_utils_append_string(&client->auth_header, at, length);
     }
-    http_utils_assign_string(&client->current_header_value, at, length);
-
-    ESP_LOGD(TAG, "HEADER=%s:%s", client->current_header_key, client->current_header_value);
-    client->event.header_key = client->current_header_key;
-    client->event.header_value = client->current_header_value;
-    http_dispatch_event(client, HTTP_EVENT_ON_HEADER, NULL, 0);
-    free(client->current_header_key);
-    free(client->current_header_value);
-    client->current_header_key = NULL;
-    client->current_header_value = NULL;
+    http_utils_append_string(&client->current_header_value, at, length);
     return 0;
 }
 
 static int http_on_headers_complete(http_parser *parser)
 {
     esp_http_client_handle_t client = parser->data;
+    http_on_header_event(client);
     client->response->status_code = parser->status_code;
     client->response->data_offset = parser->nread;
     client->response->content_length = parser->content_length;
     client->response->data_process = 0;
     ESP_LOGD(TAG, "http_on_headers_complete, status=%d, offset=%d, nread=%d", parser->status_code, client->response->data_offset, parser->nread);
     client->state = HTTP_STATE_RES_COMPLETE_HEADER;
+    if (client->connection_info.method == HTTP_METHOD_HEAD) {
+        /* In a HTTP_RESPONSE parser returning '1' from on_headers_complete will tell the
+           parser that it should not expect a body. This is used when receiving a response
+           to a HEAD request which may contain 'Content-Length' or 'Transfer-Encoding: chunked'
+           headers that indicate the presence of a body.*/
+        return 1;
+    }
     return 0;
 }
 
@@ -600,6 +615,10 @@ esp_http_client_handle_t esp_http_client_init(const esp_http_client_config_t *co
 
     if (config->client_key_pem) {
         esp_transport_ssl_set_client_key_data(ssl, config->client_key_pem, strlen(config->client_key_pem));
+    }
+
+    if (config->client_key_password && config->client_key_password_len > 0) {
+        esp_transport_ssl_set_client_key_password(ssl, config->client_key_password, config->client_key_password_len);
     }
 
     if (config->skip_cert_common_name_check) {
@@ -955,11 +974,18 @@ int esp_http_client_read(esp_http_client_handle_t client, char *buffer, int len)
                 }
                 ESP_LOG_LEVEL(sev, TAG, "esp_transport_read returned:%d and errno:%d ", rlen, errno);
             }
-            if (rlen < 0 && ridx == 0 && !esp_http_client_is_complete_data_received(client)) {
-                return ESP_FAIL;
-            } else {
+#ifdef CONFIG_ESP_HTTP_CLIENT_ENABLE_HTTPS
+            if (rlen == ESP_TLS_ERR_SSL_WANT_READ || errno == EAGAIN) {
+#else
+            if (errno == EAGAIN) {
+#endif
+                ESP_LOGD(TAG, "Received EAGAIN! rlen = %d, errno %d", rlen, errno);
                 return ridx;
             }
+            if (rlen < 0 && ridx == 0 && !esp_http_client_is_complete_data_received(client)) {
+                return ESP_FAIL;
+            }
+            return ridx;
         }
         res_buffer->output_ptr = buffer + ridx;
         http_parser_execute(client->parser, client->parser_settings, res_buffer->data, rlen);

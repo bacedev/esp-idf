@@ -11,33 +11,12 @@ Connect {IDF_TARGET_NAME} to PC
 
 Connect the {IDF_TARGET_NAME} board to the PC using the USB cable. If device driver does not install automatically, identify USB to serial converter chip on your {IDF_TARGET_NAME} board (or external converter dongle), search for drivers in internet and install them.
 
-Below are the links to drivers for {IDF_TARGET_NAME} boards produced by Espressif:
-
-.. only:: esp32
-
-    .. csv-table::
-        :header: Development Board, USB Driver, Remarks
-        :widths: 40, 20, 40
-
-        :ref:`ESP32-DevKitC <esp-modules-and-boards-esp32-devkitc>`,  `CP210x`_
-        `ESP32-LyraT <https://www.espressif.com/en/products/hardware/esp32-lyrat>`_, `CP210x`_
-        `ESP32-LyraTD-MSC <https://www.espressif.com/en/products/hardware/esp32-lyratd-msc>`_, `CP210x`_
-        :ref:`ESP32-PICO-KIT <esp-modules-and-boards-esp32-pico-kit>`, `CP210x`_
-        :ref:`ESP-WROVER-KIT <esp-modules-and-boards-esp-wrover-kit>`, `FTDI`_
-        :ref:`ESP32 Demo Board <esp-modules-and-boards-esp32-demo-board>`, `FTDI`_
-        `ESP-Prog`_, `FTDI`_, Programmer board (w/o ESP32)
-        `ESP32-MeshKit-Sense <https://github.com/espressif/esp-dev-kits/blob/master/esp32-meshkit-sensor/docs/ESP32-MeshKit-Sense_guide_en.md>`_, n/a, Use with `ESP-Prog`_
-        `ESP32-Sense-Kit <https://github.com/espressif/esp-dev-kits/blob/master/esp32-sense-kit/docs/esp32_sense_kit_guide_en.md>`_, n/a, Use with `ESP-Prog`_
-
-    .. _CP210x: https://www.silabs.com/products/development-tools/software/usb-to-uart-bridge-vcp-drivers
-    .. _FTDI: https://www.ftdichip.com/Drivers/VCP.htm
-    .. _ESP-Prog: https://github.com/espressif/esp-dev-kits/blob/master/esp-prog/docs/ESP-Prog_guide_en.md
+Below is the list of USB to serial converter chips installed on most of the {IDF_TARGET_NAME} boards produced by Espressif together with links to the drivers:
 
 * CP210x: `CP210x USB to UART Bridge VCP Drivers <https://www.silabs.com/products/development-tools/software/usb-to-uart-bridge-vcp-drivers>`_
 * FTDI: `FTDI Virtual COM Port Drivers <https://www.ftdichip.com/Drivers/VCP.htm>`_
 
-The drivers above are primarily for reference. Under normal circumstances, the drivers should be bundled with an operating system and automatically installed upon connecting one of the listed boards to the PC.
-
+Please check the board user guide for specific USB to serial converter chip used. The drivers above are primarily for reference. Under normal circumstances, the drivers should be bundled with an operating system and automatically installed upon connecting the board to the PC.
 
 Check port on Windows
 ---------------------
@@ -78,7 +57,6 @@ macOS ::
 
     macOS users: if you don't see the serial port then check you have the USB/serial drivers installed as shown in the Getting Started guide for your particular development board. For macOS High Sierra (10.13), you may also have to explicitly allow the drivers to load. Open System Preferences -> Security & Privacy -> General and check if there is a message shown here about "System Software from developer ..." where the developer name is Silicon Labs or FTDI.
 
-
 .. _linux-dialout-group:
 
 Adding user to ``dialout`` on Linux
@@ -98,7 +76,7 @@ Make sure you re-login to enable read and write permissions for the serial port.
 Verify serial connection
 ------------------------
 
-Now verify that the serial connection is operational. You can do this using a serial terminal program by checking if you get any output on the terminal after reseting {IDF_TARGET_NAME}. 
+Now verify that the serial connection is operational. You can do this using a serial terminal program by checking if you get any output on the terminal after reseting {IDF_TARGET_NAME}.
 
 Windows and Linux
 ^^^^^^^^^^^^^^^^^
@@ -145,7 +123,7 @@ To spare you the trouble of installing a serial terminal program, macOS offers t
 
     screen /dev/cu.device_name 115200
 
-  Replace ``device_name`` with the name found running ``ls /dev/cu.*``. 
+  Replace ``device_name`` with the name found running ``ls /dev/cu.*``.
 
 - What you are looking for is some log displayed by the **screen**. The log contents will depend on application loaded to {IDF_TARGET_NAME}, see `Example Output`_. To exit the **screen** session type Ctrl-A + \\ .
 

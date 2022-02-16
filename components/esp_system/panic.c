@@ -32,6 +32,7 @@
 
 #include "esp_private/panic_internal.h"
 #include "port/panic_funcs.h"
+#include "esp_rom_sys.h"
 
 #include "sdkconfig.h"
 
@@ -60,23 +61,25 @@
 #include "esp_gdbstub.h"
 #endif
 
+#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+#include "hal/usb_serial_jtag_ll.h"
+#endif
+
 bool g_panic_abort = false;
 static char *s_panic_abort_details = NULL;
 
 static wdt_hal_context_t rtc_wdt_ctx = {.inst = WDT_RWDT, .rwdt_dev = &RTCCNTL};
-static wdt_hal_context_t wdt0_context = {.inst = WDT_MWDT0, .mwdt_dev = &TIMERG0};
-static wdt_hal_context_t wdt1_context = {.inst = WDT_MWDT1, .mwdt_dev = &TIMERG1};
 
 #if !CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT
 
 #if CONFIG_ESP_CONSOLE_UART
-static uart_hal_context_t s_panic_uart = { .dev = CONFIG_ESP_CONSOLE_UART_NUM == 0 ? &UART0 : &UART1 };
+static uart_hal_context_t s_panic_uart = { .dev = CONFIG_ESP_CONSOLE_UART_NUM == 0 ? &UART0 :&UART1 };
 
 void panic_print_char(const char c)
 {
     uint32_t sz = 0;
-    while(!uart_hal_get_txfifo_len(&s_panic_uart));
-    uart_hal_write_txfifo(&s_panic_uart, (uint8_t*) &c, 1, &sz);
+    while (!uart_hal_get_txfifo_len(&s_panic_uart));
+    uart_hal_write_txfifo(&s_panic_uart, (uint8_t *) &c, 1, &sz);
 }
 #endif // CONFIG_ESP_CONSOLE_UART
 
@@ -89,6 +92,27 @@ void panic_print_char(const char c)
 }
 #endif // CONFIG_ESP_CONSOLE_USB_CDC
 
+#if CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+//Timeout; if there's no host listening, the txfifo won't ever
+//be writable after the first packet.
+
+#define USBSERIAL_TIMEOUT_MAX_US 50000
+static int s_usbserial_timeout = 0;
+
+void panic_print_char(const char c)
+{
+    while (!usb_serial_jtag_ll_txfifo_writable() && s_usbserial_timeout < (USBSERIAL_TIMEOUT_MAX_US / 100)) {
+        esp_rom_delay_us(100);
+        s_usbserial_timeout++;
+    }
+    if (usb_serial_jtag_ll_txfifo_writable()) {
+        usb_serial_jtag_ll_write_txfifo((const uint8_t *)&c, 1);
+        s_usbserial_timeout = 0;
+    }
+}
+#endif //CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+
+
 #if CONFIG_ESP_CONSOLE_NONE
 void panic_print_char(const char c)
 {
@@ -98,7 +122,7 @@ void panic_print_char(const char c)
 
 void panic_print_str(const char *str)
 {
-    for(int i = 0; str[i] != 0; i++) {
+    for (int i = 0; str[i] != 0; i++) {
         panic_print_char(str[i]);
     }
 }
@@ -140,14 +164,21 @@ void panic_print_dec(int d)
   the risk of somehow halting in the panic handler and not resetting. That is why this routine kills
   all watchdogs except the timer group 0 watchdog, and it reconfigures that to reset the chip after
   one second.
+
+  We have to do this before we do anything that might cause issues in the WDT interrupt handlers,
+  for example stalling the other core on ESP32 may cause the ESP32_ECO3_CACHE_LOCK_FIX
+  handler to get stuck.
 */
-static void reconfigure_all_wdts(void)
+void esp_panic_handler_reconfigure_wdts(void)
 {
+    wdt_hal_context_t wdt0_context = {.inst = WDT_MWDT0, .mwdt_dev = &TIMERG0};
+    wdt_hal_context_t wdt1_context = {.inst = WDT_MWDT1, .mwdt_dev = &TIMERG1};
+
     //Todo: Refactor to use Interrupt or Task Watchdog API, and a system level WDT context
     //Reconfigure TWDT (Timer Group 0)
     wdt_hal_init(&wdt0_context, WDT_MWDT0, MWDT0_TICK_PRESCALER, false); //Prescaler: wdt counts in ticks of TG0_WDT_TICK_US
     wdt_hal_write_protect_disable(&wdt0_context);
-    wdt_hal_config_stage(&wdt0_context, 0, 1000*1000/MWDT0_TICKS_PER_US, WDT_STAGE_ACTION_RESET_SYSTEM);   //1 second before reset
+    wdt_hal_config_stage(&wdt0_context, 0, 1000 * 1000 / MWDT0_TICKS_PER_US, WDT_STAGE_ACTION_RESET_SYSTEM); //1 second before reset
     wdt_hal_enable(&wdt0_context);
     wdt_hal_write_protect_enable(&wdt0_context);
 
@@ -162,6 +193,9 @@ static void reconfigure_all_wdts(void)
 */
 static inline void disable_all_wdts(void)
 {
+    wdt_hal_context_t wdt0_context = {.inst = WDT_MWDT0, .mwdt_dev = &TIMERG0};
+    wdt_hal_context_t wdt1_context = {.inst = WDT_MWDT1, .mwdt_dev = &TIMERG1};
+
     //Todo: Refactor to use Interrupt or Task Watchdog API, and a system level WDT context
     //Task WDT is the Main Watchdog Timer of Timer Group 0
     wdt_hal_write_protect_disable(&wdt0_context);
@@ -184,6 +218,10 @@ static void print_abort_details(const void *f)
 // already been done, and panic_info_t has been filled.
 void esp_panic_handler(panic_info_t *info)
 {
+    // The port-level panic handler has already called this, but call it again
+    // to reset the TG0WDT period
+    esp_panic_handler_reconfigure_wdts();
+
     // If the exception was due to an abort, override some of the panic info
     if (g_panic_abort) {
         info->description = NULL;
@@ -192,29 +230,29 @@ void esp_panic_handler(panic_info_t *info)
         info->exception = PANIC_EXCEPTION_ABORT;
     }
 
-   /*
-     * For any supported chip, the panic handler prints the contents of panic_info_t in the following format:
-     *
-     *
-     * Guru Meditation Error: Core <core> (<exception>). <description>
-     * <details>
-     *
-     * <state>
-     *
-     * <elf_info>
-     *
-     *
-     * ----------------------------------------------------------------------------------------
-     * core - core where exception was triggered
-     * exception - what kind of exception occured
-     * description - a short description regarding the exception that occured
-     * details - more details about the exception
-     * state - processor state like register contents, and backtrace
-     * elf_info - details about the image currently running
-     *
-     * NULL fields in panic_info_t are not printed.
-     *
-     * */
+    /*
+      * For any supported chip, the panic handler prints the contents of panic_info_t in the following format:
+      *
+      *
+      * Guru Meditation Error: Core <core> (<exception>). <description>
+      * <details>
+      *
+      * <state>
+      *
+      * <elf_info>
+      *
+      *
+      * ----------------------------------------------------------------------------------------
+      * core - core where exception was triggered
+      * exception - what kind of exception occured
+      * description - a short description regarding the exception that occured
+      * details - more details about the exception
+      * state - processor state like register contents, and backtrace
+      * elf_info - details about the image currently running
+      *
+      * NULL fields in panic_info_t are not printed.
+      *
+      * */
     if (info->reason) {
         panic_print_str("Guru Meditation Error: Core ");
         panic_print_dec(info->core);
@@ -267,8 +305,7 @@ void esp_panic_handler(panic_info_t *info)
 
     }
 
-    //Feed the watchdogs, so they will give us time to print out debug info
-    reconfigure_all_wdts();
+    esp_panic_handler_reconfigure_wdts(); // Restart WDT again
 
     PANIC_INFO_DUMP(info, state);
     panic_print_str("\r\n");
@@ -289,8 +326,8 @@ void esp_panic_handler(panic_info_t *info)
     esp_apptrace_flush_nolock(ESP_APPTRACE_DEST_TRAX, CONFIG_APPTRACE_POSTMORTEM_FLUSH_THRESH,
                               APPTRACE_ONPANIC_HOST_FLUSH_TMO);
 #endif
-    reconfigure_all_wdts();
-#endif
+    esp_panic_handler_reconfigure_wdts(); // restore WDT config
+#endif // CONFIG_APPTRACE_ENABLE
 
 #if CONFIG_ESP_SYSTEM_PANIC_GDBSTUB
     disable_all_wdts();
@@ -298,7 +335,7 @@ void esp_panic_handler(panic_info_t *info)
     wdt_hal_disable(&rtc_wdt_ctx);
     wdt_hal_write_protect_enable(&rtc_wdt_ctx);
     panic_print_str("Entering gdb stub now.\r\n");
-    esp_gdbstub_panic_handler((esp_gdbstub_frame_t*)info->frame);
+    esp_gdbstub_panic_handler((esp_gdbstub_frame_t *)info->frame);
 #else
 #if CONFIG_ESP_COREDUMP_ENABLE
     static bool s_dumping_core;
@@ -314,7 +351,8 @@ void esp_panic_handler(panic_info_t *info)
         esp_core_dump_to_uart(info);
 #endif
         s_dumping_core = false;
-        reconfigure_all_wdts();
+
+        esp_panic_handler_reconfigure_wdts();
     }
 #endif /* CONFIG_ESP_COREDUMP_ENABLE */
     wdt_hal_write_protect_disable(&rtc_wdt_ctx);
@@ -323,8 +361,7 @@ void esp_panic_handler(panic_info_t *info)
 #if CONFIG_ESP_SYSTEM_PANIC_PRINT_REBOOT || CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT
 
     if (esp_reset_reason_get_hint() == ESP_RST_UNKNOWN) {
-        switch (info->exception)
-        {
+        switch (info->exception) {
         case PANIC_EXCEPTION_IWDT:
             esp_reset_reason_set_hint(ESP_RST_INT_WDT);
             break;
@@ -350,10 +387,10 @@ void esp_panic_handler(panic_info_t *info)
 }
 
 
-void __attribute__((noreturn)) panic_abort(const char *details)
+void IRAM_ATTR __attribute__((noreturn)) panic_abort(const char *details)
 {
     g_panic_abort = true;
-    s_panic_abort_details = (char*) details;
+    s_panic_abort_details = (char *) details;
 
 #if CONFIG_APPTRACE_ENABLE
 #if CONFIG_SYSVIEW_ENABLE
@@ -365,7 +402,7 @@ void __attribute__((noreturn)) panic_abort(const char *details)
 #endif
 
     *((int *) 0) = 0; // NOLINT(clang-analyzer-core.NullDereference) should be an invalid operation on targets
-    while(1);
+    while (1);
 }
 
 /* Weak versions of reset reason hint functions.

@@ -55,6 +55,7 @@
 #include "esp_pthread.h"
 #include "esp_private/usb_console.h"
 #include "esp_vfs_cdcacm.h"
+#include "esp_vfs_usb_serial_jtag.h"
 
 #include "esp_rom_sys.h"
 
@@ -134,6 +135,21 @@ static IRAM_ATTR void _Unwind_SetNoFunctionContextInstall_Default(unsigned char 
 #endif // CONFIG_COMPILER_CXX_EXCEPTIONS
 
 static const char* TAG = "cpu_start";
+
+/**
+ * This function overwrites a the same function of libsupc++ (part of libstdc++).
+ * Consequently, libsupc++ will then follow our configured exception emergency pool size.
+ *
+ * It will be called even with -fno-exception for user code since the stdlib still uses exceptions.
+ */
+size_t __cxx_eh_arena_size_get(void)
+{
+#ifdef CONFIG_COMPILER_CXX_EXCEPTIONS
+    return CONFIG_COMPILER_CXX_EXCEPTIONS_EMG_POOL_SIZE;
+#else
+    return 0;
+#endif
+}
 
 /**
  * Xtensa gcc is configured to emit a .ctors section, RISC-V gcc is configured with --enable-initfini-array
@@ -228,7 +244,6 @@ static void do_core_init(void)
        fail initializing it properly. */
     heap_caps_init();
     esp_newlib_init();
-    esp_newlib_time_init();
 
     if (g_spiram_ok) {
 #if CONFIG_SPIRAM_BOOT_INIT && (CONFIG_SPIRAM_USE_CAPS_ALLOC || CONFIG_SPIRAM_USE_MALLOC)
@@ -252,6 +267,12 @@ static void do_core_init(void)
     esp_brownout_init();
 #endif
 
+    // esp_timer early initialization is required for esp_timer_get_time to work.
+    // This needs to happen before VFS initialization, since some USB_SERIAL_JTAG VFS driver uses
+    // esp_timer_get_time to determine timeout conditions.
+    esp_timer_early_init();
+    esp_newlib_time_init();
+
 #ifdef CONFIG_VFS_SUPPORT_IO
 #ifdef CONFIG_ESP_CONSOLE_UART
     esp_vfs_dev_uart_register();
@@ -262,6 +283,10 @@ static void do_core_init(void)
     ESP_ERROR_CHECK(esp_vfs_dev_cdcacm_register());
     const char *default_stdio_dev = "/dev/cdcacm";
 #endif // CONFIG_ESP_CONSOLE_USB_CDC
+#ifdef CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
+    ESP_ERROR_CHECK(esp_vfs_dev_usb_serial_jtag_register());
+    const char *default_stdio_dev = "/dev/usbserjtag";
+#endif // CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG
 #endif // CONFIG_VFS_SUPPORT_IO
 
 #if defined(CONFIG_VFS_SUPPORT_IO) && !defined(CONFIG_ESP_CONSOLE_NONE)

@@ -66,6 +66,8 @@ void rtc_init(rtc_config_t cfg)
     /* Reset RTC bias to default value (needed if waking up from deep sleep) */
     REG_SET_FIELD(RTC_CNTL_REG, RTC_CNTL_DBIAS_WAK, RTC_CNTL_DBIAS_1V10);
     REG_SET_FIELD(RTC_CNTL_REG, RTC_CNTL_DBIAS_SLP, RTC_CNTL_DBIAS_1V10);
+    /* Recover default wait cycle for touch or COCPU after wakeup from deep sleep. */
+    REG_SET_FIELD(RTC_CNTL_TIMER2_REG, RTC_CNTL_ULPCP_TOUCH_START_WAIT, RTC_CNTL_ULPCP_TOUCH_START_WAIT_DEFAULT);
 
     if (cfg.clkctl_init) {
         //clear CMMU clock force on
@@ -159,6 +161,9 @@ void rtc_init(rtc_config_t cfg)
             calibrate_ocode();
         }
     }
+
+    REG_WRITE(RTC_CNTL_INT_ENA_REG, 0);
+    REG_WRITE(RTC_CNTL_INT_CLR_REG, UINT32_MAX);
 }
 
 rtc_vddsdio_config_t rtc_vddsdio_get_config(void)

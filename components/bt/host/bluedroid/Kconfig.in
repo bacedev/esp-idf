@@ -143,7 +143,7 @@ config BT_BLE_BLUFI_ENABLE
     help
         This option can be close when the app does not require blufi function.
 
-config BT_GATT_SR_PROFILES
+config BT_GATT_MAX_SR_PROFILES
     int "Max GATT Server Profiles"
     depends on BT_GATTS_ENABLE && BT_BLUEDROID_ENABLED
     range 1 32
@@ -1025,6 +1025,16 @@ config BT_BLE_ESTAB_LINK_CONN_TOUT
     help
         Bluetooth Connection establishment maximum time, if connection time exceeds this value, the connection
         establishment fails, ESP_GATTC_OPEN_EVT or ESP_GATTS_OPEN_EVT is triggered.
+
+config BT_MAX_DEVICE_NAME_LEN
+    int "length of bluetooth device name"
+    depends on BT_BLUEDROID_ENABLED
+    range 32 248
+    default 32
+    help
+        Bluetooth Device name length shall be no larger than 248 octets, If the broadcast data cannot contain
+        the complete device name, then only the shortname will be displayed, the rest parts that can't fit in
+        will be truncated.
 
 config BT_BLE_RPA_SUPPORTED
     bool "Update RPA to Controller"

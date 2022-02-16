@@ -36,11 +36,11 @@ Advantages
 
 - The RSA public key is stored on the device. The corresponding RSA private key is kept secret on a server and is never accessed by the device.
 
-  .. only:: esp32
+.. only:: esp32
 
     - Only one public key can be generated and stored in ESP32 ECO3 during manufacturing.
 
-  .. only:: esp32s2 or esp32c3
+.. only:: esp32s2 or esp32c3
 
     - Up to three public keys can be generated and stored in the chip during manufacturing.
 
@@ -152,40 +152,44 @@ eFuse usage
 
     - ABS_DONE_1 - Enables secure boot protection on boot.
 
-    - BLK2 - Stores the SHA-256 digest of the public key. SHA-256 hash of public key modulus, exponent, precalculated R & M’ values (represented as 776 bytes – offsets 36 to 812 - as per the :ref:`signature-block-format`) is written to an eFuse key block.
+    - BLK2 - Stores the SHA-256 digest of the public key. SHA-256 hash of public key modulus, exponent, precalculated R & M’ values (represented as 776 bytes – offsets 36 to 812 - as per the :ref:`signature-block-format`) is written to an eFuse key block. The write-protection bit must be set, but the read-protection bit must not.
 
 .. only:: esp32s2 or esp32c3
 
     - SECURE_BOOT_EN - Enables secure boot protection on boot.
 
-    - KEY_PURPOSE_X - Set the purpose of the key block on {IDF_TARGET_NAME} by programming SECURE_BOOT_DIGESTX (X = 0, 1, 2) into KEY_PURPOSE_X (X = 0, 1, 2, 3, 4, 5). Example: If KEY_PURPOSE_2 is set to SECURE_BOOT_DIGEST1, then BLOCK_KEY2 will have the Secure Boot V2 public key digest.
+    - KEY_PURPOSE_X - Set the purpose of the key block on {IDF_TARGET_NAME} by programming SECURE_BOOT_DIGESTX (X = 0, 1, 2) into KEY_PURPOSE_X (X = 0, 1, 2, 3, 4, 5). Example: If KEY_PURPOSE_2 is set to SECURE_BOOT_DIGEST1, then BLOCK_KEY2 will have the Secure Boot V2 public key digest. The write-protection bit must be set (this field does not have a read-protection bit).
 
-    - BLOCK_KEYX - The block contains the data corresponding to its purpose programmed in KEY_PURPOSE_X. Stores the SHA-256 digest of the public key. SHA-256 hash of public key modulus, exponent, precalculated R & M’ values (represented as 776 bytes – offsets 36 to 812 - as per the :ref:`signature-block-format`) is written to an eFuse key block.
+    - BLOCK_KEYX - The block contains the data corresponding to its purpose programmed in KEY_PURPOSE_X. Stores the SHA-256 digest of the public key. SHA-256 hash of public key modulus, exponent, precalculated R & M’ values (represented as 776 bytes – offsets 36 to 812 - as per the :ref:`signature-block-format`) is written to an eFuse key block. The write-protection bit must be set, but the read-protection bit must not.
 
     - KEY_REVOKEX - The revocation bits corresponding to each of the 3 key block. Ex. Setting KEY_REVOKE2 revokes the key block whose key purpose is SECURE_BOOT_DIGEST2.
 
     - SECURE_BOOT_AGGRESSIVE_REVOKE - Enables aggressive revocation of keys. The key is revoked as soon as verification with this key fails.
+
+The key(s) must be readable in order to give software access to it. If the key(s) is read-protected then the software reads the key(s) as all zeros and the signature verification process occurs with error, bootloader and app can not be run.
 
 .. _secure-boot-v2-howto:
 
 How To Enable Secure Boot V2
 ----------------------------
 
-1. Open the :ref:`project-configuration-menu`, in "Security Features" set "Enable hardware Secure Boot in bootloader" to enable Secure Boot.
+1. Open the :ref:`project-configuration-menu`, in "Security features" set "Enable hardware Secure Boot in bootloader" to enable Secure Boot.
 
 .. only:: esp32
 
     2. For ESP32, Secure Boot V2 is available only ESP32 ECO3 onwards. To view the "Secure Boot V2" option the chip revision should be changed to revision 3 (ESP32- ECO3). To change the chip revision, set "Minimum Supported ESP32 Revision" to Rev 3 in "Component Config" -> "ESP32- Specific".
 
-    3. Specify the secure boot signing key path. The file can be anywhere on your system. A relative path will be evaluated from the project directory. The file does not need to exist yet.
-    4. Select the UART ROM download mode in "Security features -> UART ROM download mode". By default the UART ROM download mode has been kept enabled in order to prevent permanently disabling it in the development phase, this option is a potentially insecure option. It is recommended to disable the UART download mode for better security.
+    3. Specify the path to secure boot signing key, relative to the project directory.
+
+    4. Select the desired UART ROM download mode in "UART ROM download mode". By default the UART ROM download mode has been kept enabled in order to prevent permanently disabling it in the development phase, this option is a potentially insecure option. It is recommended to disable the UART download mode for better security.
 
 .. only:: esp32s2 or esp32c3
 
     2. The "Secure Boot V2" option will be selected and the "App Signing Scheme" would be set to RSA by default.
 
-    3. Select the number of keys to be used to sign the bootloader binary and chose one of them to sign the application. Specify the secure boot signing key paths for each one of these. The file can be anywhere on your system. A relative path will be evaluated from the project directory. The file does not need to exist yet.
-    4. Select the UART ROM download mode in "Security features -> UART ROM download mode".
+    3. Specify the path to secure boot signing key, relative to the project directory.
+
+    4. Select the desired UART ROM download mode in "UART ROM download mode". By default, it is set to "Permanently switch to Secure mode" which is generally recommended. For production devices, the most secure option is to set it to "Permanently disabled".
 
 5. Set other menuconfig options (as desired). Pay particular attention to the "Bootloader Config" options, as you can only flash the bootloader once. Then exit menuconfig and save your configuration.
 
@@ -294,7 +298,10 @@ Secure Boot Best Practices
     * Applications should be signed with only one key at a time, to minimise the exposure of unused private keys.
     * The bootloader can be signed with multiple keys from the factory.
 
-    Assuming a trusted private key (N-1) has been compromised, to update to new keypair (N).
+    Conservative approach:
+    ~~~~~~~~~~~~~~~~~~~~~~
+
+    Assuming a trusted private key (N-1) has been compromised, to update to new key pair (N).
 
     1. Server sends an OTA update with an application signed with the new private key (#N).
     2. The new OTA update is written to an unused OTA app partition.
@@ -305,6 +312,17 @@ Secure Boot Best Practices
     7. The API `esp_ota_revoke_secure_boot_public_key()` can be used to revoke the key #N-1.
 
     * A similiar approach can also be used to physically reflash with a new key. For physical reflashing, the bootloader content can also be changed at the same time.
+
+    Aggressive approach:
+    ~~~~~~~~~~~~~~~~~~~~
+
+    ROM code has an additional feature of revoking a public key digest if the signature verification fails.
+
+    To enable this feature, you need to burn SECURE_BOOT_AGGRESSIVE_REVOKE efuse or enable :ref:`CONFIG_SECURE_BOOT_ENABLE_AGGRESSIVE_KEY_REVOKE`
+
+    Key revocation is not applicable unless secure boot is successfully enabled. Also, a key is not revoked in case of invalid signature block or invalid image digest, it is only revoked in case the signature verification fails, i.e. revoke key only if failure in step 4 of :ref:`verify_signature-block`
+
+    Once a key is revoked, it can never be used for verfying a signature of an image. This feature provides strong resistance against physical attacks on the device. However, this could also brick the device permanently if all the keys are revoked because of signature verification failure.
 
 .. _secure-boot-v2-technical-details:
 
@@ -342,13 +360,17 @@ The Secure Boot V2 signature of apps can be checked on OTA update, without enabl
 
 This may be desirable in cases where the delay of Secure Boot verification on startup is unacceptable, and/or where the threat model does not include physical access or attackers writing to bootloader or app partitions in flash.
 
-In this mode, any public key which is present in the signature block of the currently running app will be used to verify the signature of a newly updated app. (The signature on the running app isn't verified during the update process, it's assumed to be valid.) In this way the system creates a chain of trust from the running app to the newly updated app.
+In this mode, the public key which is present in the signature block of the currently running app will be used to verify the signature of a newly updated app. (The signature on the running app isn't verified during the update process, it's assumed to be valid.) In this way the system creates a chain of trust from the running app to the newly updated app.
 
-For this reason, it's essential that the initial app flashed to the device is also signed. A check is run on app startup and the app will abort if no signatures are found. This is to try and prevent a situation where no update is possible. The app should have only one valid signature block in the first position. Note again that, unlike hardware Secure Boot V2, the signature of the running app isn't verified on boot.The system only verifies a signature block in the first position and ignores the other (2) appended signatures.
+For this reason, it's essential that the initial app flashed to the device is also signed. A check is run on app startup and the app will abort if no signatures are found. This is to try and prevent a situation where no update is possible. The app should have only one valid signature block in the first position. Note again that, unlike hardware Secure Boot V2, the signature of the running app isn't verified on boot. The system only verifies a signature block in the first position and ignores any other appended signatures.
+
+only:: not esp32
+
+    Although multiple trusted keys are supported when using hardware Secure Boot, only the first public key in the signature block is used to verify updates if signature checking without Secure Boot is configured. If multiple trusted public keys are required, it's necessary to enable the full Secure Boot feature instead.
 
 .. note::
 
-   In general, it's recommended to use full hardware Secure Boot unless certain that this option is sufficient for application security needs
+   In general, it's recommended to use full hardware Secure Boot unless certain that this option is sufficient for application security needs.
 
 .. _signed-app-verify-v2-howto:
 

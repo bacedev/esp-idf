@@ -8,14 +8,11 @@ Get Started
 
 {IDF_TARGET_HEAP_SIZE:default="298968", esp32="298968", esp32s2="253900", esp32c3="337332"}
 
-
 :link_to_translation:`zh_CN:[中文]`
 
 .. Please keep README.md in sync with these instructions.
 
-This document is intended to help you set up the software development environment for the hardware based on the {IDF_TARGET_NAME} chip by Espressif.
-
-After that, a simple example will show you how to use ESP-IDF (Espressif IoT Development Framework) for menu configuration, then for building and flashing firmware onto an {IDF_TARGET_NAME} board.
+This document is intended to help you set up the software development environment for the hardware based on the {IDF_TARGET_NAME} chip by Espressif. After that, a simple example will show you how to use ESP-IDF (Espressif IoT Development Framework) for menu configuration, then for building and flashing firmware onto an {IDF_TARGET_NAME} board.
 
 .. include-build-file:: inc/version-note.inc
 
@@ -31,7 +28,6 @@ Introduction
     * Dual high performance Xtensa® 32-bit LX6 CPU cores
     * Ultra Low Power co-processor
     * Multiple peripherals
-
 
 .. only:: esp32s2
 
@@ -74,7 +70,7 @@ You have a choice to either download and install the following software manually
 **or** get through the onboarding process using the following official plugins for integrated development environments (IDE) described in separate documents
 
     * `Eclipse Plugin <https://github.com/espressif/idf-eclipse-plugin>`_ (`installation link <https://github.com/espressif/idf-eclipse-plugin#installing-idf-plugin-using-update-site-url>`_)
-    * `VS Code Extension <https://github.com/espressif/vscode-esp-idf-extension>`_ (`onboarding <https://github.com/espressif/vscode-esp-idf-extension/blob/master/docs/ONBOARDING.md>`_)
+    * `VS Code Extension <https://github.com/espressif/vscode-esp-idf-extension>`_ (`setup <https://github.com/espressif/vscode-esp-idf-extension/blob/master/docs/tutorial/install.md>`_)
 
 .. figure:: ../../_static/what-you-need.png
     :align: center
@@ -110,6 +106,7 @@ If you have one of {IDF_TARGET_NAME} development boards listed below, you can cl
 
         ESP32-S2-Saola-1 <../hw-reference/esp32s2/user-guide-saola-1-v1.2>
         ESP32-S2-DevKitM-1(U) <../hw-reference/esp32s2/user-guide-devkitm-1-v1>
+        ESP32-S2-DevKitC-1 <../hw-reference/esp32s2/user-guide-s2-devkitc-1>
         ESP32-S2-Kaluga-Kit <../hw-reference/esp32s2/user-guide-esp32-s2-kaluga-1-kit>
 
 .. only:: esp32c3
@@ -119,7 +116,7 @@ If you have one of {IDF_TARGET_NAME} development boards listed below, you can cl
 
         ESP32-C3-DevKitM-1 <../hw-reference/esp32c3/user-guide-devkitm-1>
         ESP32-C3-DevKitC-02 <../hw-reference/esp32c3/user-guide-devkitc-02>
-        
+
 .. _get-started-step-by-step:
 
 Installation Step by Step
@@ -229,14 +226,14 @@ If you want to install the tools without the help of ESP-IDF Tools Installer, op
 .. code-block:: batch
 
     cd %userprofile%\esp\esp-idf
-    install.bat
+    install.bat {IDF_TARGET_PATH_NAME}
 
 or with Windows PowerShell
 
 .. code-block:: powershell
 
     cd ~/esp/esp-idf
-    ./install.ps1
+    ./install.ps1 {IDF_TARGET_PATH_NAME}
 
 Linux and macOS
 ~~~~~~~~~~~~~~~
@@ -244,7 +241,18 @@ Linux and macOS
 .. code-block:: bash
 
     cd ~/esp/esp-idf
-    ./install.sh
+    ./install.sh {IDF_TARGET_PATH_NAME}
+
+or with Fish shell
+
+.. code-block:: fish
+
+    cd ~/esp/esp-idf
+    ./install.fish {IDF_TARGET_PATH_NAME}
+
+.. note::
+    To install tools for multiple targets you can specify those targets at once. For example: ``./install.sh esp32,esp32c3,esp32s3``.
+    To install tools for all supported targets, run the script without specifying targets ``./install.sh`` or use ``./install.sh all``.
 
 Alternative File Downloads
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -365,9 +373,7 @@ Windows
     cd %userprofile%\esp
     xcopy /e /i %IDF_PATH%\examples\get-started\hello_world hello_world
 
-There is a range of example projects in the :idf:`examples` directory in ESP-IDF. You can copy any project in the same way as presented above and run it.
-
-It is also possible to build examples in-place, without copying them first.
+There is a range of example projects in the :idf:`examples` directory in ESP-IDF. You can copy any project in the same way as presented above and run it. It is also possible to build examples in-place, without copying them first.
 
 .. important::
 
@@ -435,12 +441,11 @@ You are using this menu to set up project specific variables, e.g. Wi-Fi network
 
     .. attention::
 
-        If you use ESP32-DevKitC board with the **ESP32-SOLO-1** module, enable single core mode (:ref:`CONFIG_FREERTOS_UNICORE`) in menuconfig before flashing examples.
+        If you use ESP32-DevKitC board with the **ESP32-SOLO-1** module, or ESP32-DevKitM-1 board with the **ESP32-MIN1-1(1U)** module, enable single core mode (:ref:`CONFIG_FREERTOS_UNICORE`) in menuconfig before flashing examples.
 
 .. note::
 
-    The colors of the menu could be different in your terminal. You can change the appearance with the option
-    ``--style``. Please run ``idf.py menuconfig --help`` for further information.
+    The colors of the menu could be different in your terminal. You can change the appearance with the option ``--style``. Please run ``idf.py menuconfig --help`` for further information.
 
 .. _get-started-build:
 

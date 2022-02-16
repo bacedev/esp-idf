@@ -29,8 +29,8 @@ API 指南
    lwIP TCP/IP 协议栈 <lwip>
    Memory Types <memory-types>
    分区表 <partition-tables>
-   :esp32: 射频校准 <RF_calibration>
    :esp32: ROM 调试控制台 <romconsole>
+   射频校准 <RF_calibration>
    :esp32: 安全启动 <../security/secure-boot-v1>
    安全启动 V2 <../security/secure-boot-v2>
    线程本地存储 <thread-local-storage>
@@ -40,5 +40,6 @@ API 指南
    :esp32s2: ULP-RISC-V 协处理器 <ulp-risc-v>
    单元测试 <unit-tests>
    :esp32: 单元测试 (传统 GNU Make) <unit-tests-legacy>
-   :esp32s2: USB 控制台 <usb-console>
+   :SOC_USB_SUPPORTED: USB 控制台 <usb-otg-console>
+   :SOC_USB_SERIAL_JTAG_SUPPORTED: USB Serial/JTAG Controller Console <usb-serial-jtag-console>
    Wi-Fi 驱动 <wifi>

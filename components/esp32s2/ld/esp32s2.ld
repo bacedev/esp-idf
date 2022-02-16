@@ -102,6 +102,10 @@ MEMORY
 
   /* RTC fast memory (same block as above), viewed from data bus */
   rtc_data_seg(RW) :                 org = 0x3ff9e000, len = 0x2000 - ESP_BOOTLOADER_RESERVE_RTC
+
+  /* external memory, covers the dport, dram0, dram1 cacheable address space */
+  extern_ram_seg(RWX)  :             org = 0x3F500000,
+                                     len = 0xA80000
 }
 
 #if defined(CONFIG_ESP32S2_USE_FIXED_STATIC_RAM_SIZE)
@@ -136,3 +140,13 @@ REGION_ALIAS("rtc_data_location", rtc_data_seg );
 #else
   REGION_ALIAS("default_rodata_seg", dram0_0_seg);
 #endif // CONFIG_APP_BUILD_USE_FLASH_SECTIONS
+
+
+/**
+ *  If rodata default segment is placed in `drom0_0_seg`, then flash's first rodata section must
+ *  also be first in the segment.
+ */
+#ifdef CONFIG_APP_BUILD_USE_FLASH_SECTIONS
+  ASSERT(_rodata_reserved_start == ORIGIN(default_rodata_seg),
+         ".flash.appdesc section must be placed at the beginning of the rodata segment.")
+#endif

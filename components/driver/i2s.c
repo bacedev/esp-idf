@@ -327,6 +327,14 @@ esp_err_t i2s_set_clk(i2s_port_t i2s_num, uint32_t rate, i2s_bits_per_sample_t b
         return ESP_ERR_INVALID_ARG;
     }
     p_i2s_obj[i2s_num]->sample_rate = rate;
+
+    /**
+     * Due to hardware issue, bck division on ESP32/ESP32-S2 should be greater than 8 in slave mode
+     * So the factor need to be an appropriate value
+     */
+    if ((p_i2s_obj[i2s_num]->mode & I2S_MODE_SLAVE) && !p_i2s_obj[i2s_num]->use_apll) {
+        factor = 64 * bits;
+    }
     double clkmdiv = (double)I2S_BASE_CLK / (rate * factor);
 
     if (clkmdiv > 256) {
@@ -865,8 +873,6 @@ static esp_err_t i2s_param_config(i2s_port_t i2s_num, const i2s_config_t *i2s_co
     I2S_CHECK((i2s_config), "param null", ESP_ERR_INVALID_ARG);
     I2S_CHECK((i2s_check_cfg_static(i2s_num, i2s_config) == ESP_OK), "param check error", ESP_ERR_INVALID_ARG);
 
-    periph_module_enable(i2s_periph_signal[i2s_num].module);
-
 #if SOC_I2S_SUPPORTS_ADC_DAC
     if(i2s_config->mode & I2S_MODE_ADC_BUILT_IN) {
         //in ADC built-in mode, we need to call i2s_set_adc_mode to
@@ -1023,6 +1029,8 @@ esp_err_t i2s_driver_uninstall(i2s_port_t i2s_num)
     }
 
     if(p_i2s_obj[i2s_num]->use_apll) {
+        // switch back to PLL clock source
+        i2s_hal_set_clock_sel(&(p_i2s_obj[i2s_num]->hal), I2S_CLK_D2CLK);
         rtc_clk_apll_enable(0, 0, 0, 0, 0);
     }
 #ifdef CONFIG_PM_ENABLE

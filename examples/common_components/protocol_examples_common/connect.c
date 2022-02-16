@@ -265,6 +265,7 @@ static esp_netif_t *wifi_start(void)
         .sta = {
             .ssid = CONFIG_EXAMPLE_WIFI_SSID,
             .password = CONFIG_EXAMPLE_WIFI_PASSWORD,
+            .scan_method = WIFI_ALL_CHANNEL_SCAN,
         },
     };
     ESP_LOGI(TAG, "Connecting to %s...", wifi_config.sta.ssid);
@@ -362,7 +363,7 @@ static esp_netif_t *eth_start(void)
 #elif CONFIG_EXAMPLE_ETH_PHY_DP83848
     s_phy = esp_eth_phy_new_dp83848(&phy_config);
 #endif
-#elif CONFIG_ETH_USE_SPI_ETHERNET
+#elif CONFIG_EXAMPLE_USE_SPI_ETHERNET
     gpio_install_isr_service(0);
     spi_device_handle_t spi_handle = NULL;
     spi_bus_config_t buscfg = {

@@ -50,6 +50,8 @@
 
 extern int _invalid_pc_placeholder;
 
+extern void esp_panic_handler_reconfigure_wdts(void);
+
 extern void esp_panic_handler(panic_info_t *);
 
 static wdt_hal_context_t wdt0_context = {.inst = WDT_MWDT0, .mwdt_dev = &TIMERG0};
@@ -156,6 +158,9 @@ static void panic_handler(void *frame, bool pseudo_excause)
         }
     }
 
+    // Need to reconfigure WDTs before we stall any other CPU
+    esp_panic_handler_reconfigure_wdts();
+
     esp_rom_delay_us(1);
     SOC_HAL_STALL_OTHER_CORES();
 #endif
@@ -223,7 +228,7 @@ void __attribute__((noreturn)) panic_restart(void)
         digital_reset_needed = true;
     }
 #endif
-#if CONFIG_ESP_SYSTEM_CONFIG_MEMPROT_FEATURE
+#if CONFIG_ESP_SYSTEM_MEMPROT_FEATURE
     if (esp_memprot_is_intr_ena_any() || esp_memprot_is_locked_any()) {
         digital_reset_needed = true;
     }

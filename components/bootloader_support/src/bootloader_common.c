@@ -29,6 +29,7 @@
 #include "esp_rom_crc.h"
 #include "esp_rom_gpio.h"
 #include "esp_rom_sys.h"
+#include "esp_rom_efuse.h"
 #include "esp_flash_partitions.h"
 #include "bootloader_flash_priv.h"
 #include "bootloader_common.h"
@@ -163,9 +164,7 @@ esp_err_t bootloader_common_get_sha256_of_partition (uint32_t address, uint32_t 
             .size = size,
         };
         esp_image_metadata_t data;
-        // Function esp_image_verify() verifies and fills the structure data.
-        // here important to get: image_digest, image_len, hash_appended.
-        if (esp_image_verify(ESP_IMAGE_VERIFY_SILENT, &partition_pos, &data) != ESP_OK) {
+        if (esp_image_get_metadata(&partition_pos, &data) != ESP_OK) {
             return ESP_ERR_IMAGE_INVALID;
         }
         if (data.image.hash_appended) {
@@ -194,8 +193,19 @@ void bootloader_common_vddsdio_configure(void)
 #endif // CONFIG_BOOTLOADER_VDDSDIO_BOOST
 }
 
-
 RESET_REASON bootloader_common_get_reset_reason(int cpu_no)
 {
     return rtc_get_reset_reason(cpu_no);
+}
+
+uint8_t bootloader_flash_get_cs_io(void)
+{
+    uint8_t cs_io;
+    const uint32_t spiconfig = esp_rom_efuse_get_flash_gpio_info();
+    if (spiconfig == ESP_ROM_EFUSE_FLASH_DEFAULT_SPI) {
+        cs_io = SPI_CS0_GPIO_NUM;
+    } else {
+        cs_io = (spiconfig >> 18) & 0x3f;
+    }
+    return cs_io;
 }

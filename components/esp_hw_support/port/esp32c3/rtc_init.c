@@ -151,6 +151,9 @@ void rtc_init(rtc_config_t cfg)
         CLEAR_PERI_REG_MASK(RTC_CNTL_DIG_ISO_REG, RTC_CNTL_DG_PAD_FORCE_UNHOLD);
         CLEAR_PERI_REG_MASK(RTC_CNTL_DIG_ISO_REG, RTC_CNTL_DG_PAD_FORCE_NOISO);
     }
+
+    REG_WRITE(RTC_CNTL_INT_ENA_REG, 0);
+    REG_WRITE(RTC_CNTL_INT_CLR_REG, UINT32_MAX);
 }
 
 rtc_vddsdio_config_t rtc_vddsdio_get_config(void)
@@ -295,7 +298,7 @@ uint32_t get_rtc_dbias_by_efuse(uint8_t chip_version, uint32_t dig_dbias)
     uint32_t v_dig_nearest_1v15_mul10000 = v_dig_dbias20_real_mul10000 + k_dig_ldo_real_mul10000 * (dig_dbias - 20);
     uint32_t v_rtc_nearest_1v15_mul10000 = 0;
 
-    for (rtc_dbias = 15; rtc_dbias < 32; rtc_dbias++) {
+    for (rtc_dbias = 15; rtc_dbias < 31; rtc_dbias++) {
         v_rtc_nearest_1v15_mul10000 = v_rtc_dbias20_real_mul10000 + k_rtc_ldo_real_mul10000 * (rtc_dbias - 20);
         if (v_rtc_nearest_1v15_mul10000 >= v_dig_nearest_1v15_mul10000 - 250)
             break;

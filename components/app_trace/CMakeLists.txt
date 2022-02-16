@@ -30,13 +30,17 @@ endif()
 
 idf_component_register(SRCS "${srcs}"
                        INCLUDE_DIRS "${include_dirs}"
-                       PRIV_REQUIRES soc
+                       PRIV_REQUIRES soc esp_ipc
                        LDFRAGMENTS linker.lf)
 
-# disable --coverage for this component, as it is used as transport
-# for gcov
-target_compile_options(${COMPONENT_LIB} PRIVATE "-fno-profile-arcs" "-fno-test-coverage")
 
-# Force app_trace to also appear later than gcov in link line
-idf_component_get_property(app_trace app_trace COMPONENT_LIB)
-target_link_libraries(${COMPONENT_LIB} INTERFACE $<TARGET_FILE:${app_trace}> gcov $<TARGET_FILE:${app_trace}> c)
+if(CONFIG_APPTRACE_GCOV_ENABLE)
+    # disable --coverage for this component, as it is used as transport
+    # for gcov
+    target_compile_options(${COMPONENT_LIB} PRIVATE "-fno-profile-arcs" "-fno-test-coverage")
+
+    # Force app_trace to also appear later than gcov in link line
+    idf_component_get_property(app_trace app_trace COMPONENT_LIB)
+    target_link_libraries(${COMPONENT_LIB} INTERFACE
+        "-Wl,--undefined=gcov_rtio_atexit" $<TARGET_FILE:${app_trace}> gcov $<TARGET_FILE:${app_trace}> c)
+endif()

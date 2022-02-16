@@ -29,8 +29,8 @@ API Guides
     Memory Types <memory-types>
     lwIP TCP/IP Stack <lwip>
     Partition Tables <partition-tables>
-    :esp32: RF Calibration <RF_calibration>
     :esp32: ROM debug console <romconsole>
+    RF Calibration <RF_calibration>
     :esp32: Secure Boot <../security/secure-boot-v1>
     Secure Boot V2 <../security/secure-boot-v2>
     Thread Local Storage <thread-local-storage>
@@ -40,5 +40,6 @@ API Guides
     :SOC_RISCV_COPROC_SUPPORTED: ULP-RISC-V Coprocessor <ulp-risc-v>
     Unit Testing <unit-tests>
     :esp32: Unit Testing (Legacy GNU Make) <unit-tests-legacy>
-    :SOC_USB_SUPPORTED: USB Console <usb-console>
+    :SOC_USB_SUPPORTED: USB OTG Console <usb-otg-console>
+    :SOC_USB_SERIAL_JTAG_SUPPORTED: USB Serial/JTAG Controller Console <usb-serial-jtag-console>
     WiFi Driver <wifi>

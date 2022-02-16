@@ -33,12 +33,18 @@ static const char *TAG = "example";
 // #define USE_SPI_MODE
 
 // ESP32-S2 and ESP32-C3 doesn't have an SD Host peripheral, always use SPI:
-#if CONFIG_IDF_TARGET_ESP32S2 ||CONFIG_IDF_TARGET_ESP32C3
+#if CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32C3
+
 #ifndef USE_SPI_MODE
 #define USE_SPI_MODE
 #endif // USE_SPI_MODE
 // on ESP32-S2, DMA channel must be the same as host id
+#if CONFIG_IDF_TARGET_ESP32S2
 #define SPI_DMA_CHAN    host.slot
+#elif CONFIG_IDF_TARGET_ESP32C3
+#define SPI_DMA_CHAN    SPI_DMA_CH_AUTO
+#endif //CONFIG_IDF_TARGET_ESP32S2
+
 #endif //CONFIG_IDF_TARGET_ESP32S2
 
 // DMA channel to be used by the SPI peripheral
@@ -84,7 +90,7 @@ void app_main(void)
         .max_files = 5,
         .allocation_unit_size = 16 * 1024
     };
-    sdmmc_card_t* card;
+    sdmmc_card_t *card;
     const char mount_point[] = MOUNT_POINT;
     ESP_LOGI(TAG, "Initializing SD card");
 
@@ -112,6 +118,7 @@ void app_main(void)
     gpio_set_pull_mode(12, GPIO_PULLUP_ONLY);   // D2, needed in 4-line mode only
     gpio_set_pull_mode(13, GPIO_PULLUP_ONLY);   // D3, needed in 4- and 1-line modes
 
+    ESP_LOGI(TAG, "Mounting filesystem");
     ret = esp_vfs_fat_sdmmc_mount(mount_point, &host, &slot_config, &mount_config, &card);
 #else
     ESP_LOGI(TAG, "Using SPI peripheral");
@@ -143,13 +150,14 @@ void app_main(void)
     if (ret != ESP_OK) {
         if (ret == ESP_FAIL) {
             ESP_LOGE(TAG, "Failed to mount filesystem. "
-                "If you want the card to be formatted, set the EXAMPLE_FORMAT_IF_MOUNT_FAILED menuconfig option.");
+                     "If you want the card to be formatted, set the EXAMPLE_FORMAT_IF_MOUNT_FAILED menuconfig option.");
         } else {
             ESP_LOGE(TAG, "Failed to initialize the card (%s). "
-                "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
+                     "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
         }
         return;
     }
+    ESP_LOGI(TAG, "Filesystem mounted");
 
     // Card has been initialized, print its properties
     sdmmc_card_print_info(stdout, card);
@@ -157,7 +165,7 @@ void app_main(void)
     // Use POSIX and C standard library functions to work with files.
     // First create a file.
     ESP_LOGI(TAG, "Opening file");
-    FILE* f = fopen(MOUNT_POINT"/hello.txt", "w");
+    FILE *f = fopen(MOUNT_POINT"/hello.txt", "w");
     if (f == NULL) {
         ESP_LOGE(TAG, "Failed to open file for writing");
         return;
@@ -191,7 +199,7 @@ void app_main(void)
     fgets(line, sizeof(line), f);
     fclose(f);
     // strip newline
-    char* pos = strchr(line, '\n');
+    char *pos = strchr(line, '\n');
     if (pos) {
         *pos = '\0';
     }
