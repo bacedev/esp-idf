@@ -27,6 +27,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "soc/soc_caps.h"
+#include "regi2c_ctrl.h"
 #include "driver/rtc_io.h"
 #include "hal/rtc_io_hal.h"
 #include "bootloader_common.h"
@@ -138,7 +139,7 @@ typedef struct {
     uint64_t sleep_duration;
     uint32_t wakeup_triggers : 15;
     uint32_t ext1_trigger_mode : 1;
-    uint32_t ext1_rtc_gpio_mask : 18;
+    uint32_t ext1_rtc_gpio_mask : 22; //22 is the maximum RTCIO number in all chips
     uint32_t ext0_trigger_level : 1;
     uint32_t ext0_rtc_gpio_num : 5;
     uint32_t gpio_wakeup_mask : 6;
@@ -152,6 +153,8 @@ typedef struct {
     void     *cpu_pd_mem;
 #endif
 } sleep_config_t;
+
+_Static_assert(22 >= SOC_RTCIO_PIN_COUNT, "Chip has more RTCIOs than 22, should increase ext1_rtc_gpio_mask field size");
 
 static sleep_config_t s_config = {
     .pd_options = {
@@ -509,6 +512,10 @@ static uint32_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags)
 #endif
 #endif
 
+#if REGI2C_ANA_CALI_PD_WORKAROUND
+    regi2c_analog_cali_reg_read();
+#endif
+
 #if CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3
     if (deep_sleep) {
         if (s_config.wakeup_triggers & RTC_TOUCH_TRIG_EN) {
@@ -596,6 +603,10 @@ static uint32_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags)
 #if CONFIG_MAC_BB_PD
     mac_bb_power_up_cb_execute();
 #endif
+#if REGI2C_ANA_CALI_PD_WORKAROUND
+    regi2c_analog_cali_reg_write();
+#endif
+
     // re-enable UART output
     resume_uarts();
 
@@ -1269,10 +1280,14 @@ static uint32_t get_power_down_flags(void)
 #if SOC_RTC_SLOW_MEM_SUPPORTED && SOC_ULP_SUPPORTED
     // Labels are defined in the linker script
     extern int _rtc_slow_length;
+    /**
+     * Compiler considers "(size_t) &_rtc_slow_length > 0" to always be true.
+     * So use a volatile variable to prevent compiler from doing this optimization.
+     */
+    volatile size_t rtc_slow_mem_used = (size_t)&_rtc_slow_length;
 
     if ((s_config.pd_options[ESP_PD_DOMAIN_RTC_SLOW_MEM] == ESP_PD_OPTION_AUTO) &&
-            ((size_t) &_rtc_slow_length > 0 ||
-             (s_config.wakeup_triggers & RTC_ULP_TRIG_EN))) {
+            (rtc_slow_mem_used > 0 || (s_config.wakeup_triggers & RTC_ULP_TRIG_EN))) {
         s_config.pd_options[ESP_PD_DOMAIN_RTC_SLOW_MEM] = ESP_PD_OPTION_ON;
     }
 #endif
