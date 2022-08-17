@@ -984,6 +984,8 @@ xMBMasterTCPPortSendResponse( UCHAR * pucMBTCPFrame, USHORT usTCPLength )
             ESP_LOGD(TAG, MB_SLAVE_FMT(", send to died slave, error = %d"),
                                                   pxInfo->xIndex, pxInfo->xSockId, pxInfo->pcIpAddr, pxInfo->xError);
         } else {
+            // Set Unit ID to 1 as default, since some devices require this not to be zero, we can make it configurable if needed.
+            pucMBTCPFrame[MB_TCP_UID] = 1;
             // Apply TID field to the frame before send
             pucMBTCPFrame[MB_TCP_TID] = (UCHAR)(pxInfo->usTidCnt >> 8U);
             pucMBTCPFrame[MB_TCP_TID + 1] = (UCHAR)(pxInfo->usTidCnt & 0xFF);
