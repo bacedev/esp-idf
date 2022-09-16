@@ -3,7 +3,6 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
 #include "utils/includes.h"
 #include "utils/common.h"
 #include "esp_event.h"
@@ -23,6 +22,7 @@
 
 struct wpa_supplicant g_wpa_supp;
 
+#if defined(CONFIG_WPA_11KV_SUPPORT)
 static TaskHandle_t s_supplicant_task_hdl = NULL;
 static void *s_supplicant_evt_queue = NULL;
 static void *s_supplicant_api_lock = NULL;
@@ -312,23 +312,83 @@ void esp_supplicant_common_deinit(void)
 	}
 }
 
+bool esp_rrm_is_rrm_supported_connection(void)
+{
+	struct wpa_supplicant *wpa_s = &g_wpa_supp;
+
+	if (!wpa_s->current_bss) {
+		wpa_printf(MSG_DEBUG, "STA not associated, return");
+		return false;
+	}
+
+	if (!(wpa_s->rrm_ie[0] & WLAN_RRM_CAPS_NEIGHBOR_REPORT)) {
+		wpa_printf(MSG_DEBUG,
+			"RRM: No network support for Neighbor Report.");
+		return false;
+	}
+
+	return true;
+}
+
 int esp_rrm_send_neighbor_rep_request(neighbor_rep_request_cb cb,
 				      void *cb_ctx)
 {
+	struct wpa_supplicant *wpa_s = &g_wpa_supp;
 	struct wpa_ssid_value wpa_ssid = {0};
-	struct wifi_ssid *ssid = esp_wifi_sta_get_prof_ssid_internal();
+	struct wifi_ssid *ssid;
+
+	if (!wpa_s->current_bss) {
+		wpa_printf(MSG_ERROR, "STA not associated, return");
+		return -2;
+	}
+
+	if (!(wpa_s->rrm_ie[0] & WLAN_RRM_CAPS_NEIGHBOR_REPORT)) {
+		wpa_printf(MSG_ERROR,
+			"RRM: No network support for Neighbor Report.");
+		return -1;
+	}
+
+	ssid = esp_wifi_sta_get_prof_ssid_internal();
 
 	os_memcpy(wpa_ssid.ssid, ssid->ssid, ssid->len);
 	wpa_ssid.ssid_len = ssid->len;
 
-	return wpas_rrm_send_neighbor_rep_request(&g_wpa_supp, &wpa_ssid, 0, 0, cb, cb_ctx);
+	return wpas_rrm_send_neighbor_rep_request(wpa_s, &wpa_ssid, 0, 0, cb, cb_ctx);
+}
+
+bool esp_wnm_is_btm_supported_connection(void)
+{
+	struct wpa_supplicant *wpa_s = &g_wpa_supp;
+
+	if (!wpa_s->current_bss) {
+		wpa_printf(MSG_DEBUG, "STA not associated, return");
+		return false;
+	}
+
+	if (!wpa_bss_ext_capab(wpa_s->current_bss, WLAN_EXT_CAPAB_BSS_TRANSITION)) {
+		wpa_printf(MSG_DEBUG, "AP doesn't support BTM, return");
+		return false;
+	}
+
+	return true;
 }
 
 int esp_wnm_send_bss_transition_mgmt_query(enum btm_query_reason query_reason,
 					   const char *btm_candidates,
 					   int cand_list)
 {
-	return wnm_send_bss_transition_mgmt_query(&g_wpa_supp, query_reason, btm_candidates, cand_list);
+	struct wpa_supplicant *wpa_s = &g_wpa_supp;
+
+	if (!wpa_s->current_bss) {
+		wpa_printf(MSG_ERROR, "STA not associated, return");
+		return -2;
+	}
+
+	if (!wpa_bss_ext_capab(wpa_s->current_bss, WLAN_EXT_CAPAB_BSS_TRANSITION)) {
+		wpa_printf(MSG_ERROR, "AP doesn't support BTM, return");
+		return -1;
+	}
+	return wnm_send_bss_transition_mgmt_query(wpa_s, query_reason, btm_candidates, cand_list);
 }
 
 void wpa_supplicant_connect(struct wpa_supplicant *wpa_s,
@@ -371,6 +431,93 @@ void esp_set_rm_enabled_ie(void)
 	}
 }
 
+static size_t get_rm_enabled_ie(uint8_t *ie, size_t len)
+{
+	uint8_t rrm_ie[7] = {0};
+	uint8_t rrm_ie_len = 5;
+	uint8_t *pos = rrm_ie;
+
+	if (!esp_wifi_is_rm_enabled_internal(WIFI_IF_STA)) {
+		return 0;
+	}
+
+	*pos++ = WLAN_EID_RRM_ENABLED_CAPABILITIES;
+	*pos++ = rrm_ie_len;
+	*pos |= WLAN_RRM_CAPS_LINK_MEASUREMENT;
+
+	*pos |= WLAN_RRM_CAPS_BEACON_REPORT_PASSIVE |
+#ifdef SCAN_CACHE_SUPPORTED
+		WLAN_RRM_CAPS_BEACON_REPORT_TABLE |
+#endif
+		WLAN_RRM_CAPS_BEACON_REPORT_ACTIVE;
+
+	os_memcpy(ie, rrm_ie, sizeof(rrm_ie));
+
+	return rrm_ie_len + 2;
+}
+#endif
+
+static uint8_t get_extended_caps_ie(uint8_t *ie, size_t len)
+{
+	uint8_t ext_caps_ie[5] = {0};
+	uint8_t ext_caps_ie_len = 3;
+	uint8_t *pos = ext_caps_ie;
+
+	if (!esp_wifi_is_btm_enabled_internal(WIFI_IF_STA)) {
+		return 0;
+	}
+
+	*pos++ = WLAN_EID_EXT_CAPAB;
+	*pos++ = ext_caps_ie_len;
+	*pos++ = 0;
+	*pos++ = 0;
+#define CAPAB_BSS_TRANSITION BIT(3)
+	*pos |= CAPAB_BSS_TRANSITION;
+#undef CAPAB_BSS_TRANSITION
+	os_memcpy(ie, ext_caps_ie, sizeof(ext_caps_ie));
+
+	return ext_caps_ie_len + 2;
+}
+
+void esp_set_assoc_ie(uint8_t *bssid, const u8 *ies, size_t ies_len, bool mdie)
+{
+#define ASSOC_IE_LEN 128
+	uint8_t *ie, *pos;
+	size_t len = ASSOC_IE_LEN, ie_len;
+	ie = os_malloc(ASSOC_IE_LEN + ies_len);
+	if (!ie) {
+		wpa_printf(MSG_ERROR, "failed to allocate ie");
+		return;
+	}
+	pos = ie;
+	ie_len = get_extended_caps_ie(pos, len);
+	pos += ie_len;
+	len -= ie_len;
+#ifdef CONFIG_WPA_11KV_SUPPORT
+	ie_len = get_rm_enabled_ie(pos, len);
+	pos += ie_len;
+	len -= ie_len;
+#ifdef CONFIG_MBO
+	ie_len = get_operating_class_ie(pos, len);
+	pos += ie_len;
+	len -= ie_len;
+	ie_len = get_mbo_oce_assoc_ie(pos, len);
+	pos += ie_len;
+	len -= ie_len;
+#endif /* CONFIG_MBO */
+#endif
+	if (ies_len) {
+		os_memcpy(pos, ies, ies_len);
+		pos += ies_len;
+		len -= ies_len;
+	}
+	esp_wifi_unset_appie_internal(WIFI_APPIE_ASSOC_REQ);
+	esp_wifi_set_appie_internal(WIFI_APPIE_ASSOC_REQ, ie, ASSOC_IE_LEN - len, 0);
+	os_free(ie);
+#undef ASSOC_IE_LEN
+}
+
+#ifdef CONFIG_WPA_11KV_SUPPORT
 void esp_get_tx_power(uint8_t *tx_power)
 {
 #define DEFAULT_MAX_TX_POWER 19 /* max tx power is 19.5 dbm */
@@ -446,3 +593,4 @@ int esp_supplicant_post_evt(uint32_t evt_id, uint32_t data)
 	}
 	return 0;
 }
+#endif

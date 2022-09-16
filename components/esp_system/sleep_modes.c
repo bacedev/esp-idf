@@ -454,6 +454,33 @@ void esp_sleep_enable_gpio_switch(bool enable)
 }
 #endif // SOC_GPIO_SUPPORT_SLP_SWITCH
 
+inline static void IRAM_ATTR misc_modules_sleep_prepare(void)
+{
+#if CONFIG_MAC_BB_PD
+    mac_bb_power_down_cb_execute();
+#endif
+#ifdef CONFIG_IDF_TARGET_ESP32
+#if CONFIG_GPIO_ESP32_SUPPORT_SWITCH_SLP_PULL
+    gpio_sleep_mode_config_apply();
+#endif
+#endif
+#if SOC_PM_SUPPORT_CPU_PD
+    rtc_cntl_hal_enable_cpu_retention(s_config.cpu_pd_mem);
+#endif
+}
+
+inline static void IRAM_ATTR misc_modules_wake_prepare(void)
+{
+#if SOC_PM_SUPPORT_CPU_PD
+    rtc_cntl_hal_disable_cpu_retention();
+#endif
+#if CONFIG_GPIO_ESP32_SUPPORT_SWITCH_SLP_PULL
+    gpio_sleep_mode_config_unapply();
+#endif
+#if CONFIG_MAC_BB_PD
+    mac_bb_power_up_cb_execute();
+#endif
+}
 
 static uint32_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags)
 {
@@ -482,10 +509,6 @@ static uint32_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags)
     rtc_clk_cpu_freq_get_config(&cpu_freq_config);
     rtc_clk_cpu_freq_set_xtal();
 
-#if CONFIG_MAC_BB_PD
-    mac_bb_power_down_cb_execute();
-#endif
-
 #if SOC_PM_SUPPORT_EXT_WAKEUP
     // Configure pins for external wakeup
     if (s_config.wakeup_triggers & RTC_EXT0_TRIG_EN) {
@@ -502,19 +525,24 @@ static uint32_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags)
     }
 #endif
 
-#ifdef CONFIG_IDF_TARGET_ESP32
+#if CONFIG_ULP_COPROC_ENABLED
     // Enable ULP wakeup
     if (s_config.wakeup_triggers & RTC_ULP_TRIG_EN) {
+#ifdef CONFIG_IDF_TARGET_ESP32
         rtc_hal_ulp_wakeup_enable();
-    }
-#if CONFIG_GPIO_ESP32_SUPPORT_SWITCH_SLP_PULL
-    gpio_sleep_mode_config_apply();
+#else
+        rtc_hal_ulp_int_clear();
 #endif
+    }
 #endif
 
 #if REGI2C_ANA_CALI_PD_WORKAROUND
     regi2c_analog_cali_reg_read();
 #endif
+
+    if (!deep_sleep) {
+        misc_modules_sleep_prepare();
+    }
 
 #if CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3
     if (deep_sleep) {
@@ -590,19 +618,9 @@ static uint32_t IRAM_ATTR esp_sleep_start(uint32_t pd_flags)
 
     if (!deep_sleep) {
         s_config.ccount_ticks_record = cpu_ll_get_cycle_count();
+        misc_modules_wake_prepare();
     }
 
-#if SOC_PM_SUPPORT_CPU_PD
-    rtc_cntl_hal_disable_cpu_retention();
-#endif
-
-#if CONFIG_GPIO_ESP32_SUPPORT_SWITCH_SLP_PULL
-    gpio_sleep_mode_config_unapply();
-#endif
-
-#if CONFIG_MAC_BB_PD
-    mac_bb_power_up_cb_execute();
-#endif
 #if REGI2C_ANA_CALI_PD_WORKAROUND
     regi2c_analog_cali_reg_write();
 #endif
@@ -710,7 +728,7 @@ esp_err_t esp_light_sleep_start(void)
 
     s_config.rtc_ticks_at_sleep_start = rtc_time_get();
     uint32_t ccount_at_sleep_start = cpu_ll_get_cycle_count();
-    uint64_t frc_time_at_start = esp_system_get_time();
+    uint64_t frc_time_at_start = esp_timer_get_time();
     uint32_t sleep_time_overhead_in = (ccount_at_sleep_start - s_config.ccount_ticks_record) / (esp_clk_cpu_freq() / 1000000ULL);
 
     DPORT_STALL_OTHER_CPU_START();
@@ -720,8 +738,15 @@ esp_err_t esp_light_sleep_start(void)
 
     // Re-calibrate the RTC Timer clock
 #if defined(CONFIG_ESP32_RTC_CLK_SRC_EXT_CRYS) || defined(CONFIG_ESP32S2_RTC_CLK_SRC_EXT_CRYS) || defined(CONFIG_ESP32C3_RTC_CLK_SRC_EXT_CRYS)
-    uint64_t time_per_us = 1000000ULL;
-    s_config.rtc_clk_cal_period = (time_per_us << RTC_CLK_CAL_FRACT) / rtc_clk_slow_freq_get_hz();
+    if (rtc_clk_slow_freq_get() == RTC_SLOW_FREQ_32K_XTAL) {
+        uint64_t time_per_us = 1000000ULL;
+        s_config.rtc_clk_cal_period = (time_per_us << RTC_CLK_CAL_FRACT) / rtc_clk_slow_freq_get_hz();
+    } else {
+        // If the external 32 kHz XTAL does not exist, use the internal 150 kHz RC oscillator
+        // as the RTC slow clock source.
+        s_config.rtc_clk_cal_period = rtc_clk_cal(RTC_CAL_RTC_MUX, RTC_CLK_SRC_CAL_CYCLES);
+        esp_clk_slowclk_cal_set(s_config.rtc_clk_cal_period);
+    }
 #elif defined(CONFIG_ESP32S2_RTC_CLK_SRC_INT_RC)
     s_config.rtc_clk_cal_period = rtc_clk_cal_cycling(RTC_CAL_RTC_MUX, RTC_CLK_SRC_CAL_CYCLES);
     esp_clk_slowclk_cal_set(s_config.rtc_clk_cal_period);
@@ -786,10 +811,6 @@ esp_err_t esp_light_sleep_start(void)
 
     periph_inform_out_light_sleep_overhead(s_config.sleep_time_adjustment - sleep_time_overhead_in);
 
-#if SOC_PM_SUPPORT_CPU_PD
-    rtc_cntl_hal_enable_cpu_retention(s_config.cpu_pd_mem);
-#endif
-
     rtc_vddsdio_config_t vddsdio_config = rtc_vddsdio_get_config();
 
     // Safety net: enable WDT in case exit from light sleep fails
@@ -813,14 +834,14 @@ esp_err_t esp_light_sleep_start(void)
     // FRC1 has been clock gated for the duration of the sleep, correct for that.
 #ifdef CONFIG_IDF_TARGET_ESP32C3
     /**
-     * On esp32c3, rtc_time_get() is non-blocking, esp_system_get_time() is
+     * On esp32c3, rtc_time_get() is non-blocking, esp_timer_get_time() is
      * blocking, and the measurement data shows that this order is better.
      */
-    uint64_t frc_time_at_end = esp_system_get_time();
+    uint64_t frc_time_at_end = esp_timer_get_time();
     uint64_t rtc_ticks_at_end = rtc_time_get();
 #else
     uint64_t rtc_ticks_at_end = rtc_time_get();
-    uint64_t frc_time_at_end = esp_system_get_time();
+    uint64_t frc_time_at_end = esp_timer_get_time();
 #endif
 
     uint64_t rtc_time_diff = rtc_time_slowclk_to_us(rtc_ticks_at_end - s_config.rtc_ticks_at_sleep_start, s_config.rtc_clk_cal_period);

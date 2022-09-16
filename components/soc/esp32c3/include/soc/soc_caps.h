@@ -18,7 +18,7 @@
 /*-------------------------- COMMON CAPS ---------------------------------------*/
 #define SOC_SUPPORTS_SECURE_DL_MODE         1
 #define SOC_EFUSE_SECURE_BOOT_KEY_DIGESTS   3
-
+#define SOC_EFUSE_HAS_EFUSE_RST_BUG         1
 
 /*-------------------------- AES CAPS -----------------------------------------*/
 #define SOC_AES_SUPPORT_DMA     (1)
@@ -95,7 +95,7 @@
 
 #define SOC_I2C_FIFO_LEN            (32) /*!< I2C hardware FIFO depth */
 
-#define SOC_I2C_SUPPORT_HW_FSM_RST  (1)
+// FSM_RST only resets the FSM, not using it. So SOC_I2C_SUPPORT_HW_FSM_RST not defined.
 #define SOC_I2C_SUPPORT_HW_CLR_BUS  (1)
 
 #define SOC_I2C_SUPPORT_XTAL        (1)

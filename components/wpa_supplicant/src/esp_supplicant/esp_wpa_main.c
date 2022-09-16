@@ -1,16 +1,8 @@
-// Copyright 2019 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/*
+ * SPDX-FileCopyrightText: 2019-2021 Espressif Systems (Shanghai) CO LTD
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #include "utils/includes.h"
 #include "utils/common.h"
@@ -38,15 +30,15 @@
 #include "esp_common_i.h"
 
 void  wpa_install_key(enum wpa_alg alg, u8 *addr, int key_idx, int set_tx,
-                      u8 *seq, size_t seq_len, u8 *key, size_t key_len, int key_entry_valid)
+                      u8 *seq, size_t seq_len, u8 *key, size_t key_len, enum key_flag key_flag)
 {
-    esp_wifi_set_sta_key_internal(alg, addr, key_idx, set_tx, seq, seq_len, key, key_len, key_entry_valid);
+    esp_wifi_set_sta_key_internal(alg, addr, key_idx, set_tx, seq, seq_len, key, key_len, key_flag);
 }
 
 int  wpa_get_key(uint8_t *ifx, int *alg, u8 *addr, int *key_idx,
-                 u8 *key, size_t key_len, int key_entry_valid)
+                 u8 *key, size_t key_len, enum key_flag key_flag)
 {
-    return esp_wifi_get_sta_key_internal(ifx, alg, addr, key_idx, key, key_len, key_entry_valid);
+    return esp_wifi_get_sta_key_internal(ifx, alg, addr, key_idx, key, key_len, key_flag);
 }
 
 /**
@@ -201,6 +193,7 @@ int wpa_parse_wpa_ie_wrapper(const u8 *wpa_ie, size_t wpa_ie_len, wifi_wpa_ie_t 
     data->capabilities = ie.capabilities;
     data->pmkid = ie.pmkid;
     data->mgmt_group_cipher = cipher_type_map_supp_to_public(ie.mgmt_group_cipher);
+    data->rsnxe_capa = ie.rsnxe_capa;
 
     return ret;
 }
@@ -226,7 +219,7 @@ static void wpa_sta_disconnected_cb(uint8_t reason_code)
     }
 }
 
-#ifndef ROAMING_SUPPORT
+#ifndef CONFIG_WPA_11KV_SUPPORT
 static inline int esp_supplicant_common_init(struct wpa_funcs *wpa_cb)
 {
 	wpa_cb->wpa_sta_rx_mgmt = NULL;
@@ -242,7 +235,7 @@ int esp_supplicant_init(void)
     int ret = ESP_OK;
     struct wpa_funcs *wpa_cb;
 
-    wpa_cb = (struct wpa_funcs *)os_malloc(sizeof(struct wpa_funcs));
+    wpa_cb = (struct wpa_funcs *)os_zalloc(sizeof(struct wpa_funcs));
     if (!wpa_cb) {
         return ESP_ERR_NO_MEM;
     }
@@ -267,6 +260,7 @@ int esp_supplicant_init(void)
     wpa_cb->wpa_config_bss = NULL;//wpa_config_bss;
     wpa_cb->wpa_michael_mic_failure = wpa_michael_mic_failure;
     wpa_cb->wpa_config_done = wpa_config_done;
+    wpa_cb->wpa_sta_set_ap_rsnxe = wpa_sm_set_ap_rsnxe;
 
     esp_wifi_register_wpa3_cb(wpa_cb);
     ret = esp_supplicant_common_init(wpa_cb);

@@ -18,6 +18,9 @@
 #include "esp_netif.h"
 #include "protocol_examples_common.h"
 #include "esp_tls.h"
+#if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+#include "esp_crt_bundle.h"
+#endif
 
 #include "esp_http_client.h"
 
@@ -40,6 +43,9 @@ extern const char howsmyssl_com_root_cert_pem_end[]   asm("_binary_howsmyssl_com
 
 extern const char dl_espressif_com_root_cert_pem_start[] asm("_binary_dl_espressif_com_root_cert_pem_start");
 extern const char dl_espressif_com_root_cert_pem_end[]   asm("_binary_dl_espressif_com_root_cert_pem_end");
+
+extern const char postman_echo_com_root_cert_pem_start[] asm("_binary_postman_echo_com_root_cert_pem_start");
+extern const char postman_echo_com_root_cert_pem_end[]   asm("_binary_postman_echo_com_root_cert_pem_end");
 
 esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
@@ -363,12 +369,13 @@ static void http_auth_digest(void)
     esp_http_client_cleanup(client);
 }
 
+#if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
 static void https_with_url(void)
 {
     esp_http_client_config_t config = {
         .url = "https://www.howsmyssl.com",
         .event_handler = _http_event_handler,
-        .cert_pem = howsmyssl_com_root_cert_pem_start,
+        .crt_bundle_attach = esp_crt_bundle_attach,
     };
     esp_http_client_handle_t client = esp_http_client_init(&config);
     esp_err_t err = esp_http_client_perform(client);
@@ -382,6 +389,7 @@ static void https_with_url(void)
     }
     esp_http_client_cleanup(client);
 }
+#endif // CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
 
 static void https_with_hostname_path(void)
 {
@@ -448,6 +456,7 @@ static void http_redirect_to_https(void)
     esp_http_client_config_t config = {
         .url = "http://httpbin.org/redirect-to?url=https%3A%2F%2Fwww.howsmyssl.com",
         .event_handler = _http_event_handler,
+        .cert_pem = howsmyssl_com_root_cert_pem_start,
     };
     esp_http_client_handle_t client = esp_http_client_init(&config);
     esp_err_t err = esp_http_client_perform(client);
@@ -524,6 +533,7 @@ static void https_async(void)
         .event_handler = _http_event_handler,
         .is_async = true,
         .timeout_ms = 5000,
+        .cert_pem = postman_echo_com_root_cert_pem_start,
     };
     esp_http_client_handle_t client = esp_http_client_init(&config);
     esp_err_t err;
@@ -621,7 +631,7 @@ static void http_native_request(void)
         }
         int data_read = esp_http_client_read_response(client, output_buffer, MAX_HTTP_OUTPUT_BUFFER);
         if (data_read >= 0) {
-            ESP_LOGI(TAG, "HTTP GET Status = %d, content_length = %d",
+            ESP_LOGI(TAG, "HTTP POST Status = %d, content_length = %d",
             esp_http_client_get_status_code(client),
             esp_http_client_get_content_length(client));
             ESP_LOG_BUFFER_HEX(TAG, output_buffer, strlen(output_buffer));
@@ -632,12 +642,13 @@ static void http_native_request(void)
     esp_http_client_cleanup(client);
 }
 
+#if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
 static void http_partial_download(void)
 {
     esp_http_client_config_t config = {
         .url = "https://dl.espressif.com/dl/esp-idf/ci/esp_http_client_demo.txt",
         .event_handler = _http_event_handler,
-        .cert_pem = dl_espressif_com_root_cert_pem_start,
+        .crt_bundle_attach = esp_crt_bundle_attach,
     };
     esp_http_client_handle_t client = esp_http_client_init(&config);
 
@@ -676,6 +687,7 @@ static void http_partial_download(void)
 
     esp_http_client_cleanup(client);
 }
+#endif // CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
 
 static void http_test_task(void *pvParameters)
 {
@@ -688,7 +700,9 @@ static void http_test_task(void *pvParameters)
     http_auth_digest();
     http_relative_redirect();
     http_absolute_redirect();
+#if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
     https_with_url();
+#endif
     https_with_hostname_path();
     http_redirect_to_https();
     http_download_chunk();
@@ -696,7 +710,9 @@ static void http_test_task(void *pvParameters)
     https_async();
     https_with_invalid_url();
     http_native_request();
+#if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
     http_partial_download();
+#endif
 
     ESP_LOGI(TAG, "Finish http example");
     vTaskDelete(NULL);

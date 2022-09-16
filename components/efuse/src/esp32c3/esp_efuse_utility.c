@@ -15,7 +15,8 @@
 
 static const char *TAG = "efuse";
 
-#define ESP_EFUSE_BLOCK_ERROR_BITS(error_reg, block) ((error_reg) & (0x0F << (4 * (block))))
+#define ESP_EFUSE_BLOCK_ERROR_BITS(error_reg, block) ((error_reg) & (0x08 << (4 * (block))))
+#define ESP_EFUSE_BLOCK_ERROR_NUM_BITS(error_reg, block) ((error_reg) & (0x07 << (4 * (block))))
 
 #ifdef CONFIG_EFUSE_VIRTUAL
 extern uint32_t virt_blocks[EFUSE_BLK_MAX][COUNT_EFUSE_REG_PER_BLOCK];
@@ -96,11 +97,16 @@ static bool efuse_hal_is_coding_error_in_block(unsigned block)
         }
     } else if (block <= 10) {
         // The order of error in these regs is different only for the C3 chip.
+        // Fail bit (mask=0x8):
         // EFUSE_RD_RS_ERR0_REG: (hi) BLOCK7, BLOCK6, BLOCK5, BLOCK4, BLOCK3, BLOCK2, BLOCK1, ------ (low)
         // EFUSE_RD_RS_ERR1_REG:                                                      BLOCK9, BLOCK8
+        // Error num bits (mask=0x7):
+        // EFUSE_RD_RS_ERR0_REG: (hi) BLOCK8, BLOCK7, BLOCK6, BLOCK5, BLOCK4, BLOCK3, BLOCK2, BLOCK1 (low)
+        // EFUSE_RD_RS_ERR1_REG:                                                      BLOCK10, BLOCK9
         // BLOCK10 is not presented in the error regs.
-        uint32_t error_reg = REG_READ(EFUSE_RD_RS_ERR0_REG + (block / 8) * 4);
-        return ESP_EFUSE_BLOCK_ERROR_BITS(error_reg, block % 8) != 0;
+        uint32_t err_fail_reg = REG_READ(EFUSE_RD_RS_ERR0_REG + (block / 8) * 4);
+        uint32_t err_num_reg = REG_READ(EFUSE_RD_RS_ERR0_REG + ((block - 1) / 8) * 4);
+        return (ESP_EFUSE_BLOCK_ERROR_BITS(err_fail_reg, block % 8) != 0) || (ESP_EFUSE_BLOCK_ERROR_NUM_BITS(err_num_reg, (block - 1) % 8) != 0);
     }
     return false;
 }
@@ -112,6 +118,27 @@ void esp_efuse_utility_clear_program_registers(void)
 {
     efuse_read();
     ets_efuse_clear_program_registers();
+}
+
+
+esp_err_t esp_efuse_utility_check_errors(void)
+{
+    if (REG_GET_BIT(EFUSE_RD_REPEAT_DATA3_REG, EFUSE_ERR_RST_ENABLE)) {
+        for (unsigned i = 0; i < 5; i++) {
+            uint32_t error_reg = REG_READ(EFUSE_RD_REPEAT_ERR0_REG + i * 4);
+            if (error_reg) {
+                uint32_t data_reg = REG_READ(EFUSE_RD_REPEAT_DATA0_REG + i * 4);
+                if (error_reg & data_reg) {
+                    // For 0001 situation (4x coding scheme):
+                    // an error bit points that data bit is wrong in case the data bit equals 1. (need to reboot in this case).
+                    ESP_EARLY_LOGE(TAG, "Error in EFUSE_RD_REPEAT_DATA%d_REG of BLOCK0 (error_reg=0x%08x, data_reg=0x%08x). Need to reboot", i, error_reg, data_reg);
+                    efuse_read();
+                    return ESP_FAIL;
+                }
+            }
+        }
+    }
+    return ESP_OK;
 }
 
 // Burn values written to the efuse write registers

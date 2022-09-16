@@ -260,6 +260,8 @@ esp_err_t esp_bt_controller_init(esp_bt_controller_config_t *cfg);
 
 /**
  * @brief  De-initialize BT controller to free resource and delete task.
+ *         You should stop advertising and scanning, as well as
+ *         disconnect all existing connections before de-initializing BT controller.
  *
  * This function should be called only once, after any other BT functions are called.
  * This function is not whole completed, esp_bt_controller_init cannot called after this function.
@@ -446,6 +448,26 @@ void esp_bt_controller_wakeup_request(void);
  */
 int esp_bt_h4tl_eif_io_event_notify(int event);
 
+<<<<<<< HEAD
+=======
+/**
+ * @brief bt Wi-Fi power domain power on
+ */
+void esp_wifi_bt_power_domain_on(void);
+
+/**
+ * @brief bt Wi-Fi power domain power off
+ */
+void esp_wifi_bt_power_domain_off(void);
+
+/**
+ * @brief Register application callback function to Wi-Fi low power clock module.
+ *
+ * @param callback : Wi-Fi set low power clock callback function
+ */
+void esp_wifi_set_lpclk_register_callback(esp_set_lpclk_source_callback_t callback);
+
+>>>>>>> 8f0c559c03... make bluetooth and wifi use the same low power clock
 #ifdef __cplusplus
 }
 #endif
