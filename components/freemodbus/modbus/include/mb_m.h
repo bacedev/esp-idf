@@ -137,7 +137,7 @@ eMBErrorCode    eMBMasterSerialInit( eMBMode eMode, UCHAR ucPort,
  *        slave addresses are in the range 1 - 247.
  *    - eMBErrorCode::MB_EPORTERR IF the porting layer returned an error.
  */
-eMBErrorCode    eMBMasterTCPInit( USHORT usTCPPort );
+eMBErrorCode    eMBMasterTCPInit( USHORT usTCPPort, uint8_t i_unit_id );
 
 /*! \ingroup modbus
  * \brief Release resources used by the protocol stack.

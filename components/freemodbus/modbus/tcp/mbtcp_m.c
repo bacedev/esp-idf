@@ -72,11 +72,11 @@
 
 /* ----------------------- Start implementation -----------------------------*/
 eMBErrorCode
-eMBMasterTCPDoInit( USHORT ucTCPPort )
+eMBMasterTCPDoInit( USHORT ucTCPPort, uint8_t i_unit_id )
 {
     eMBErrorCode    eStatus = MB_ENOERR;
 
-    if( xMBMasterTCPPortInit( ucTCPPort ) == FALSE )
+    if( xMBMasterTCPPortInit( ucTCPPort, i_unit_id ) == FALSE )
     {
         eStatus = MB_EPORTERR;
     }

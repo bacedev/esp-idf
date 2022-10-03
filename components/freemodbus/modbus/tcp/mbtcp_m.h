@@ -40,7 +40,7 @@ PR_BEGIN_EXTERN_C
 #if MB_MASTER_TCP_ENABLED
 
 /* ----------------------- Function prototypes ------------------------------*/
-eMBErrorCode    eMBMasterTCPDoInit( USHORT ucTCPPort );
+eMBErrorCode    eMBMasterTCPDoInit( USHORT ucTCPPort, uint8_t i_unit_id );
 void            eMBMasterTCPStart( void );
 void            eMBMasterTCPStop( void );
 eMBErrorCode    eMBMasterTCPReceive( UCHAR * pucRcvAddress, UCHAR ** pucFrame,

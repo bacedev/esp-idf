@@ -152,7 +152,7 @@ static esp_err_t mbc_tcp_master_start(void)
     const mb_communication_info_t* comm_info = (mb_communication_info_t*)&mbm_opts->mbm_comm;
 
     // Initialize Modbus stack using mbcontroller parameters
-    status = eMBMasterTCPInit((USHORT)comm_info->ip_port);
+    status = eMBMasterTCPInit((USHORT)comm_info->ip_port, comm_info->unit_id);
     MB_MASTER_CHECK((status == MB_ENOERR), ESP_ERR_INVALID_STATE,
             "mb stack initialization failure, eMBMasterInit() returns (0x%x).", status);
 
