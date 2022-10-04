@@ -988,7 +988,6 @@ xMBMasterTCPPortSendResponse( UCHAR * pucMBTCPFrame, USHORT usTCPLength )
         } else {
             // Set Unit ID
             pucMBTCPFrame[MB_TCP_UID] = unit_id;
-            ESP_LOGI(TAG, "Using unit id %d", unit_id);
             // Apply TID field to the frame before send
             pucMBTCPFrame[MB_TCP_TID] = (UCHAR)(pxInfo->usTidCnt >> 8U);
             pucMBTCPFrame[MB_TCP_TID + 1] = (UCHAR)(pxInfo->usTidCnt & 0xFF);
