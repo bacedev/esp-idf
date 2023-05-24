@@ -48,7 +48,9 @@ extern "C" {
 #define GPIO_IS_VALID_GPIO(gpio_num)        (((1ULL << (gpio_num)) & SOC_GPIO_VALID_GPIO_MASK) != 0)
 /// Check whether it can be a valid GPIO number of output mode
 #define GPIO_IS_VALID_OUTPUT_GPIO(gpio_num) (((1ULL << (gpio_num)) & SOC_GPIO_VALID_OUTPUT_GPIO_MASK) != 0)
-
+/// Check whether it can be a valid digital I/O pad
+#define GPIO_IS_VALID_DIGITAL_IO_PAD(gpio_num) ((gpio_num >= 0) && \
+                                                 (((1ULL << (gpio_num)) & SOC_GPIO_VALID_DIGITAL_IO_PAD_MASK) != 0))
 
 typedef intr_handle_t gpio_isr_handle_t;
 
@@ -445,7 +447,6 @@ esp_err_t gpio_force_hold_all(void);
 esp_err_t gpio_force_unhold_all(void);
 #endif
 
-#if SOC_GPIO_SUPPORT_SLP_SWITCH
 /**
   * @brief Enable SLP_SEL to change GPIO status automantically in lightsleep.
   * @param gpio_num GPIO number of the pad.
@@ -492,7 +493,6 @@ esp_err_t gpio_sleep_set_direction(gpio_num_t gpio_num, gpio_mode_t mode);
  *     - ESP_ERR_INVALID_ARG : Parameter error
  */
 esp_err_t gpio_sleep_set_pull_mode(gpio_num_t gpio_num, gpio_pull_mode_t pull);
-#endif
 
 #if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
 

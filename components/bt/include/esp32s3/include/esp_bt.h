@@ -122,11 +122,11 @@ enum {
     .txant_dft = CONFIG_BT_CTRL_TX_ANTENNA_INDEX_EFF,                      \
     .rxant_dft = CONFIG_BT_CTRL_RX_ANTENNA_INDEX_EFF,                      \
     .txpwr_dft = CONFIG_BT_CTRL_DFT_TX_POWER_LEVEL_EFF,                    \
-};
+}
 
 
 #else
-#define BT_CONTROLLER_INIT_CONFIG_DEFAULT() {0}; _Static_assert(0, "please enable bluetooth in menuconfig to use bt.h");
+#define BT_CONTROLLER_INIT_CONFIG_DEFAULT() {0}; _Static_assert(0, "please enable bluetooth in menuconfig to use esp_bt.h");
 #endif
 
 /**

@@ -422,6 +422,7 @@ tBTM_STATUS btm_ble_stop_adv(void);
 tBTM_STATUS btm_ble_start_scan(void);
 void btm_ble_create_ll_conn_complete (UINT8 status);
 void btm_ble_create_conn_cancel_complete (UINT8 *p);
+tBTM_STATUS btm_ble_set_random_addr(BD_ADDR random_bda);
 
 /* LE security function from btm_sec.c */
 #if SMP_INCLUDED == TRUE
@@ -499,6 +500,7 @@ BOOLEAN btm_ble_disable_resolving_list(UINT8 rl_mask, BOOLEAN to_resume);
 void btm_ble_enable_resolving_list_for_platform (UINT8 rl_mask);
 void btm_ble_resolving_list_init(UINT8 max_irk_list_sz);
 void btm_ble_resolving_list_cleanup(void);
+void btm_ble_add_default_entry_to_resolving_list(void);
 #endif
 
 void btm_ble_multi_adv_configure_rpa (tBTM_BLE_MULTI_ADV_INST *p_inst);

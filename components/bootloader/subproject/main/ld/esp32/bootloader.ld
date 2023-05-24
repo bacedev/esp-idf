@@ -43,7 +43,7 @@ SECTIONS
     *libbootloader_support.a:bootloader_flash.*(.literal .text .literal.* .text.*)
     *libbootloader_support.a:bootloader_random.*(.literal .text .literal.* .text.*)
     *libbootloader_support.a:bootloader_random*.*(.literal.bootloader_random_disable .text.bootloader_random_disable)
-    *libbootloader_support.a:bootloader_efuse_esp32.*(.literal .text .literal.* .text.*)
+    *libbootloader_support.a:bootloader_efuse.*(.literal .text .literal.* .text.*)
     *libbootloader_support.a:bootloader_utility.*(.literal .text .literal.* .text.*)
     *libbootloader_support.a:bootloader_sha.*(.literal .text .literal.* .text.*)
     *libbootloader_support.a:bootloader_console_loader.*(.literal .text .literal.* .text.*)
@@ -57,6 +57,7 @@ SECTIONS
     *libmicro-ecc.a:*.*(.literal .text .literal.* .text.*)
     *libspi_flash.a:*.*(.literal .text .literal.* .text.*)
     *libhal.a:wdt_hal_iram.*(.literal .text .literal.* .text.*)
+    *libhal.a:efuse_hal.*(.literal .text .literal.* .text.*)
     *libesp_hw_support.a:rtc_clk.*(.literal .text .literal.* .text.*)
     *libesp_hw_support.a:rtc_time.*(.literal .text .literal.* .text.*)
     *libefuse.a:*.*(.literal .text .literal.* .text.*)
@@ -178,5 +179,24 @@ SECTIONS
     _text_end = ABSOLUTE(.);
     _etext = .;
   } > iram_seg
+
+  /** This section will be used by the debugger and disassembler to get more information
+   * about raw data present in the code.
+   * Indeed, it may be required to add some padding at some points in the code
+   * in order to align a branch/jump destination on a particular bound.
+   * Padding these instructions will generate null bytes that shall be
+   * interpreted as data, and not code by the debugger or disassembler.
+   * This section will only be present in the ELF file, not in the final binary
+   * For more details, check GCC-212
+   */
+  .xt.prop 0 :
+  {
+    KEEP (*(.xt.prop .gnu.linkonce.prop.*))
+  }
+
+  .xt.lit 0 :
+  {
+    KEEP (*(.xt.lit .gnu.linkonce.p.*))
+  }
 
 }

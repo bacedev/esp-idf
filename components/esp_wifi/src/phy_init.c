@@ -19,6 +19,7 @@
 #include <sys/lock.h>
 
 #include "soc/rtc.h"
+#include "soc/syscon_reg.h"
 #include "esp_err.h"
 #include "esp_phy_init.h"
 #include "esp_system.h"
@@ -43,12 +44,11 @@
 #elif CONFIG_IDF_TARGET_ESP32C3
 #include "esp32c3/rom/rtc.h"
 #include "soc/rtc_cntl_reg.h"
-#include "soc/syscon_reg.h"
 #elif CONFIG_IDF_TARGET_ESP32S3
 #include "esp32s3/rom/rtc.h"
 #include "soc/rtc_cntl_reg.h"
-#include "soc/syscon_reg.h"
 #endif
+#include "hal/efuse_hal.h"
 
 #if CONFIG_IDF_TARGET_ESP32
 extern wifi_mac_time_update_cb_t s_wifi_mac_time_update_cb;
@@ -86,7 +86,7 @@ static DRAM_ATTR portMUX_TYPE s_phy_int_mux = portMUX_INITIALIZER_UNLOCKED;
 
 /* Memory to store PHY digital registers */
 static uint32_t* s_phy_digital_regs_mem = NULL;
-static uint8_t s_phy_backup_mem_ref = 0;
+static uint8_t s_phy_modem_init_ref = 0;
 
 #if CONFIG_MAC_BB_PD
 uint32_t* s_mac_bb_pd_mem = NULL;
@@ -293,9 +293,9 @@ void IRAM_ATTR esp_wifi_bt_power_domain_on(void)
     _lock_acquire(&s_wifi_bt_pd_controller.lock);
     if (s_wifi_bt_pd_controller.count++ == 0) {
         CLEAR_PERI_REG_MASK(RTC_CNTL_DIG_PWC_REG, RTC_CNTL_WIFI_FORCE_PD);
-#if CONFIG_IDF_TARGET_ESP32C3
-        SET_PERI_REG_MASK(SYSCON_WIFI_RST_EN_REG, SYSTEM_WIFIBB_RST | SYSTEM_FE_RST);
-        CLEAR_PERI_REG_MASK(SYSCON_WIFI_RST_EN_REG, SYSTEM_WIFIBB_RST | SYSTEM_FE_RST);
+#if !CONFIG_IDF_TARGET_ESP32
+        SET_PERI_REG_MASK(SYSCON_WIFI_RST_EN_REG, MODEM_RESET_FIELD_WHEN_PU);
+        CLEAR_PERI_REG_MASK(SYSCON_WIFI_RST_EN_REG, MODEM_RESET_FIELD_WHEN_PU);
 #endif
         CLEAR_PERI_REG_MASK(RTC_CNTL_DIG_ISO_REG, RTC_CNTL_WIFI_FORCE_ISO);
     }
@@ -312,11 +312,11 @@ void esp_wifi_bt_power_domain_off(void)
     _lock_release(&s_wifi_bt_pd_controller.lock);
 }
 
-void esp_phy_pd_mem_init(void)
+void esp_phy_modem_init(void)
 {
     _lock_acquire(&s_phy_access_lock);
 
-    s_phy_backup_mem_ref++;
+    s_phy_modem_init_ref++;
     if (s_phy_digital_regs_mem == NULL) {
         s_phy_digital_regs_mem = (uint32_t *)heap_caps_malloc(SOC_PHY_DIG_REGS_MEM_SIZE, MALLOC_CAP_DMA|MALLOC_CAP_INTERNAL);
     }
@@ -325,15 +325,21 @@ void esp_phy_pd_mem_init(void)
 
 }
 
-void esp_phy_pd_mem_deinit(void)
+void esp_phy_modem_deinit(void)
 {
     _lock_acquire(&s_phy_access_lock);
 
-    s_phy_backup_mem_ref--;
-    if (s_phy_backup_mem_ref == 0) {
+    s_phy_modem_init_ref--;
+    if (s_phy_modem_init_ref == 0) {
         s_is_phy_reg_stored = false;
         free(s_phy_digital_regs_mem);
         s_phy_digital_regs_mem = NULL;
+        /* Fix the issue caused by the power domain off.
+        * This issue is only on ESP32C3.
+        */
+#if CONFIG_IDF_TARGET_ESP32C3
+        phy_init_flag();
+#endif
     }
 
     _lock_release(&s_phy_access_lock);
@@ -669,7 +675,7 @@ void esp_phy_load_cal_and_init(void)
     ESP_LOGI(TAG, "phy_version %s", phy_version);
 
 #if CONFIG_IDF_TARGET_ESP32S2
-    phy_eco_version_sel(esp_efuse_get_chip_ver());
+    phy_eco_version_sel(efuse_hal_chip_revision() / 100);
 #endif
 
     esp_phy_calibration_data_t* cal_data =

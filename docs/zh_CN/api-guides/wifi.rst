@@ -9,7 +9,7 @@
 - 支持仅 station 模式、仅 AP 模式、station/AP 共存模式
 - 支持使用 IEEE 802.11B、IEEE 802.11G、IEEE 802.11N 和 API 配置协议模式
 - 支持 WPA/WPA2/WPA3/WPA2-企业版和 WPS
-- 支持 AMPDU、HT40、QoS 以及其它主要功能
+- 支持 AMSDU、AMPDU、HT40、QoS 以及其它主要功能
 - 支持 Modem-sleep
 - 支持乐鑫专属协议，可实现 **1 km** 数据通信量
 - 空中数据传输最高可达 20 MBit/s TCP 吞吐量和 30 MBit/s UDP 吞吐量
@@ -747,7 +747,7 @@ Wi-Fi 驱动程序内部扫描阶段
 Wi-Fi 原因代码
 +++++++++++++++++++++
 
-下表罗列了 {IDF_TARGET_NAME} 中定义的原因代码。其中，第一列为 esp_wifi_types.h 中定义的宏名称。名称中省去了前缀 *WIFI_REASON*，也就是说，名称 *UNSPECIFIED* 实际应为 *WIFI_REASON_UNSPECIFIED*，以此类推。第二列为原因代码的相应数值。第三列为该原因映射到 IEEE 802.11-2012 中 8.4.1.7 段的标准值。（更多详细信息，请参阅前文描述。）最后一列为这一原因的描述。
+下表罗列了 {IDF_TARGET_NAME} 中定义的原因代码。其中，第一列为 esp_wifi_types.h 中定义的宏名称。名称中省去了前缀 *WIFI_REASON*，也就是说，名称 *UNSPECIFIED* 实际应为 *WIFI_REASON_UNSPECIFIED*，以此类推。第二列为原因代码的相应数值。第三列为该原因映射到 IEEE 802.11-2020 中 9.4.1.7 段的标准值。（更多详细信息，请参阅前文描述。）最后一列为这一原因的描述。
 
 .. list-table::
    :header-rows: 1
@@ -977,6 +977,102 @@ Wi-Fi 原因代码
        对于 ESP station，出现以下情况时报告该代码：
 
        - 从 AP 接收到该代码。
+   * - TDLS_PEER_UNREACHABLE
+     - 25
+     - 25
+     - 通过 TDLS 直连无法到达TDLS 对端 STA，导致 TDLS 直连中断。
+   * - TDLS_UNSPECIFIED
+     - 26
+     - 26
+     - 不明原因的 TDLS 直连中断。
+   * - SSP_REQUESTED_DISASSOC
+     - 27
+     - 27
+     - association 取消，由于会话被 SSP request 终止。
+   * - NO_SSP_ROAMING_AGREEMENT
+     - 28
+     - 28
+     - association 取消，由于缺乏 SSP 漫游认证。
+   * - BAD_CIPHER_OR_AKM
+     - 29
+     - 29
+     - 请求的服务被拒绝，由于 SSP 密码套件或者 AKM 的需求。
+   * - NOT_AUTHORIZED_THIS_LO CATION
+     - 30
+     - 30
+     - 请求的服务在此位置未得到授权。
+   * - SERVICE_CHANGE_PRECLUDES_TS
+     - 31
+     - 31
+     - TS 被删除，原因是：BSS 服务特性或者运行模式改变导致 Qos AP 缺少足够的带宽给 Qos STA 使用（例如：一个HT BSS 从 40 MHz 的信道切换到 20 MHz 的信道）。
+   * - UNSPECIFIED_QOS
+     - 32
+     - 32
+     - association 取消，由于不明确的 QoS 相关原因。
+   * - NOT_ENOUGH_BANDWIDTH
+     - 33
+     - 33
+     - association 取消，由于QoS AP 缺少足够的带宽给该 QoS STA 使用。
+   * - MISSING_ACKS
+     - 34
+     - 34
+     - association 取消，原因是：大量的帧需要被确认，但由于 AP 传输或者糟糕的信道条件而没有被确认。
+   * - EXCEEDED_TXOP
+     - 35
+     - 35
+     - association 取消，由于 STA 的传输超过了 TXOPs 的限制。
+   * - STA_LEAVING
+     - 36
+     - 36
+     - 请求 STA 离开了 BSS 或者重置了。
+   * - END_BA
+     - 37
+     - 37
+     - 请求 STA 不再使用该流或者会话。
+   * - UNKNOWN_BA
+     - 38
+     - 38
+     - 请求 STA 使用一种尚未完成的机制接收帧。
+   * - TIMEOUT
+     - 39
+     - 39
+     - 对端 STA 的请求超时。
+   * - Reserved
+     - 40 ~ 45
+     - 40 ~ 45
+     - 保留
+   * - PEER_INITIATED
+     - 46
+     - 46
+     - 在 Disassociation 帧中：已达到授权访问限制。
+   * - AP_INITIATED
+     - 47
+     - 47
+     - 在 Disassociation 帧中：外部服务需求。
+   * - INVALID_FT_ACTION_FRAME_COUNT
+     - 48
+     - 48
+     - 无效的 FT Action 帧计数。
+   * - INVALID_PMKID
+     - 49
+     - 49
+     - 无效的成对主密钥标识符（PMKID）。
+   * - INVALID_MDE
+     - 50
+     - 50
+     - 无效的 MDE。
+   * - INVALID_FTE
+     - 51
+     - 51
+     - 无效的 FTE。
+   * - TRANSMISSION_LINK_ESTABLISHMENT_FAILED
+     - 67
+     - 67
+     - 在备用信道中建立传输链路失败。
+   * - ALTERATIVE_CHANNEL_OCCUPIED
+     - 68
+     - 68
+     - 备用信道被占用。
    * - BEACON_TIMEOUT
      - 200
      - 保留
@@ -1001,6 +1097,52 @@ Wi-Fi 原因代码
      - 205
      - 保留
      - 乐鑫特有的 Wi-Fi 原因代码： AP 连接失败。
+
+与密码错误有关的 Wi-Fi 原因代码
++++++++++++++++++++++++++++++++++
+
+下表罗列了与密码错误相关的 Wi-Fi 原因代码。
+
+.. list-table::
+   :header-rows: 1
+   :widths: 5 10 40
+
+   * - 原因代码
+     - 数值
+     - 描述
+   * - 4WAY_HANDSHAKE_TIMEOUT
+     - 15
+     - 四次握手超时。STA 在连接加密的 AP 的时候输入了错误的密码
+   * - NO_AP_FOUND
+     - 201
+     - 密码错误会出现这个原因代码的场景有如下两个：
+
+       - STA 在连接加密的 AP 的时候没有输入密码
+       - STA 在连接非加密的 AP 的时候输入了密码
+   * - HANDSHAKE_TIMEOUT
+     - 204
+     - 握手超时。
+
+
+与低 RSSI 有关的 Wi-Fi 原因代码
++++++++++++++++++++++++++++++++++
+
+下表罗列了与低 RSSI 相关的 Wi-Fi 原因代码。
+
+.. list-table::
+   :header-rows: 1
+   :widths: 5 10 40
+
+   * - 原因代码
+     - 数值
+     - 描述
+   * - NO_AP_FOUND
+     - 201
+     - 低 RSSI 导致 station 无法扫描到目标 AP
+   * - HANDSHAKE_TIMEOUT
+     - 204
+     - 握手超时。
+
 
 找到多个 AP 时的 {IDF_TARGET_NAME} Wi-Fi station 连接
 ----------------------------------------------------------------------
@@ -1056,7 +1198,7 @@ Wi-Fi 模式
 Station 基本配置
 +++++++++++++++++++++++++++++++++++++
 
-API esp_wifi_set_config() 可用于配置 station。下表详细介绍了各个字段。
+API :cpp:func:`esp_wifi_set_config()` 可用于配置 station。配置的参数信息会保存到 NVS 中。下表详细介绍了各个字段。
 
 .. list-table::
    :header-rows: 1
@@ -1075,7 +1217,7 @@ API esp_wifi_set_config() 可用于配置 station。下表详细介绍了各个�
    * - bssid
      - 只有当 bssid_set 为 1 时有效。见字段 “bssid_set”。
    * - channel
-     - 该字段为 0 时，station 扫描信道 1 ~ N 寻找目标 AP；否则，station 首先扫描值与 “channel” 字段相同的信道，再扫描其他信道。如果您不知道目标 AP 在哪个信道，请将该字段设置为 0。
+     - 该字段为 0 时，station 扫描信道 1 ~ N 寻找目标 AP；否则，station 首先扫描值与 “channel” 字段相同的信道，再扫描其他信道。比如，当该字段设置为 3 时，扫描顺序为 3，1，2，...，N 。如果您不知道目标 AP 在哪个信道，请将该字段设置为 0。
    * - sort_method
      - 该字段仅用于 WIFI_ALL_CHANNEL_SCAN 模式。
 
@@ -1093,7 +1235,7 @@ API esp_wifi_set_config() 可用于配置 station。下表详细介绍了各个�
 AP 基本配置
 +++++++++++++++++++++++++++++++++++++
 
-API esp_wifi_set_config() 可用于配置 AP。下表详细介绍了各个字段。
+API :cpp:func:`esp_wifi_set_config()` 可用于配置 AP。配置的参数信息会保存到 NVS 中。下表详细介绍了各个字段。
 
 .. list-table::
    :header-rows: 1
@@ -1212,7 +1354,7 @@ LR 吞吐量
 
 通常使用 LR 的场景包括：
 
- - AP 和 station 都是设备。
+ - AP 和 station 都是乐鑫设备。
  - 需要长距离 Wi-Fi 连接和数据传输。
  - 数据吞吐量要求非常小，例如远程设备控制等。
 
@@ -1234,25 +1376,51 @@ Wi-Fi 国家/地区代码
        - ASCII 码 ‘O’ 字符，代表 station/AP 所处国家/地区的规定仅允许室外环境。
        - ASCII 码 ‘I’ 字符，代表 station/AP 所处国家/地区的规定仅允许室内环境。
        - ASCII 码 ‘X’ 字符，代表 station/AP 位于非国家/地区实体。非国家实体的前两个八位字节是两个 ASCII 码 ‘XX’ 字符。
-       - 当前使用的操作类表编号的二进制形式。见 IEEE Std 802.11-2012 附件 E。
+       - 当前使用的操作类表编号的二进制形式。见 IEEE Std 802.11-2020 附件 E。
 
    * - schan
-     - 起始信道，station/AP 所处国家/地区规定的最小信道数。
+     - 起始信道，station/AP 所处国家/地区规定的最小信道值。
    * - nchan
      - 规定的总信道数，比如，如果 schan=1，nchan=13，那么 station/AP 可以从信道 1 至 13 发送数据。
    * - policy
-     - 国家/地区政策，当配置的国家/地区信息与所连 AP 的国家/地区信息冲突时，该字段决定使用哪一信息。更多政策相关信息，可参见下文。
+     - 国家/地区策略，当配置的国家/地区信息与所连 AP 的国家/地区信息冲突时，该字段决定使用哪一信息。更多策略相关信息，可参见下文。
 
-默认国家/地区信息为 {.cc="CN", .schan=1, .nchan=13, policy=WIFI_COUNTRY_POLICY_AUTO}，如果 Wi-Fi 模式为 AP-STA 共存模式，则它们配置的国家/地区信息相同。有时，station 所连 AP 的国家/地区信息与配置的不同。例如，配置的 station 国家/地区信息为 {.cc="JP", .schan=1, .nchan=14, policy=WIFI_COUNTRY_POLICY_AUTO}，但所连 AP 的国家/地区信息为 {.cc="CN", .schan=1, .nchan=13}，此时，使用 AP 的国家/地区信息。
+默认国家/地区信息为::
 
-下表描述了在不同 Wi-Fi 模式和不同国家/地区政策下使用的国家/地区信息，并描述了对主动扫描的影响。
+    wifi_country_t config = {
+        .cc = "CN",
+        .schan = 1,
+        .nchan = 13,
+        .policy = WIFI_COUNTRY_POLICY_AUTO,
+    };
+
+如果 Wi-Fi 模式为 station/AP 共存模式，则它们配置的国家/地区信息相同。有时，station 所连 AP 的国家/地区信息与配置的不同。例如，配置的 station 国家/地区信息为::
+
+    wifi_country_t config = {
+        .cc = "JP",
+        .schan = 1,
+        .nchan = 14,
+        .policy = WIFI_COUNTRY_POLICY_AUTO,
+    };
+
+但所连 AP 的国家/地区信息为::
+
+    wifi_country_t config = {
+        .cc = "CN",
+        .schan = 1,
+        .nchan = 13,
+    };
+
+此时，使用所连 AP 的国家/地区信息。
+
+下表描述了在不同 Wi-Fi 模式和不同国家/地区策略下使用的国家/地区信息，并描述了对主动扫描的影响。
 
 .. list-table::
    :header-rows: 1
    :widths: 15 15 35
 
    * - Wi-Fi 模式
-     - 政策
+     - 策略
      - 描述
    * - station 模式
      - WIFI_COUNTRY_POLICY_AUTO
@@ -1260,30 +1428,36 @@ Wi-Fi 国家/地区代码
 
        扫描时：
 
-       - 如果 schan+nchan-1>11：
+         主动扫描信道 1 至信道 11，被动扫描信道 12 至 信道 14。
 
-         主动扫描起始信道至信道 11，被动扫描信道 12 至 信道 schan+nchan-1。
-
-       - 如果 schan+nchan-1<=11：
-
-         主动扫描起始信道至信道 schan+nchan-1。
-
-       请记住，如果 AP 带有隐藏 SSID 且 station 被设置为被动扫描信道，被动扫描将无法找到该 AP。也就是说，如果应用程序希望在每个信道中找到带有隐藏 SSID 的 AP，国家/地区信息应该配置为 WIFI_COUNTRY_POLICY_MANUAL。
+       请记住，如果带有隐藏 SSID 的 AP 和 station 被设置在被动扫描信道上，被动扫描将无法找到该 AP。也就是说，如果应用程序希望在每个信道中找到带有隐藏 SSID 的 AP，国家/地区信息应该配置为 WIFI_COUNTRY_POLICY_MANUAL。
 
    * - station 模式
      - WIFI_COUNTRY_POLICY_MANUAL
-     - 总是使用配置的国家/地区信息。 扫描时，主动扫描起始信道至信道 schan+nchan-1。
+     - 总是使用配置的国家/地区信息。
+
+       扫描时：
+
+         主动扫描信道 schan 至信道 schan+nchan-1。
+
    * - AP 模式
      - WIFI_COUNTRY_POLICY_AUTO
      - 总是使用配置的国家/地区信息。
+
    * - AP 模式
      - WIFI_COUNTRY_POLICY_MANUAL
      - 总是使用配置的国家/地区信息。
+
    * - station/AP 共存模式
      - WIFI_COUNTRY_POLICY_AUTO
-     - 如果 station 不连接任何外部 AP，AP 使用配置的国家/地区信息。如果 station 连接一个外部 AP，该 AP 的国家/地区信息与该 station 相同。
+     - 该 station 与 station 模式、WIFI_COUNTRY_POLICY_AUTO 策略下使用的国家/地区信息相同。
+       如果 station 不连接任何外部 AP，AP 使用配置的国家/地区信息。如果 station 连接一个外部 AP，该 AP 的国家/地区信息与该 station 相同。
 
-       与 station 模式、WIFI_COUNTRY_POLICY_AUTO 政策下使用的国家/地区信息相同。
+   * - station/AP 共存模式
+     - WIFI_COUNTRY_POLICY_MANUAL
+     - 该 station 与 station 模式、WIFI_COUNTRY_POLICY_MANUAL 策略下使用的国家/地区信息相同。
+       该 AP 与 AP 模式、WIFI_COUNTRY_POLICY_MANUAL 策略下使用的国家/地区信息相同。
+
 
 主信道
 *************************
@@ -1338,7 +1512,7 @@ WPA2-Enterprise 是企业无线网络的安全认证机制。在连接到接入�
 
 请参考 IDF 示例程序 :idf_file:`examples/wifi/roaming/README.md` 来设置和使用这些 API。示例代码只演示了如何使用这些 API，应用程序应根据需要定义自己的算法和案例。
 
-.. only:: esp32s2 or esp32c3
+.. only:: SOC_WIFI_FTM_SUPPORT
 
     Wi-Fi Location
     -------------------------------
@@ -1782,7 +1956,18 @@ Wi-Fi 协议中定义了四个 AC （访问类别），每个 AC 有各自的优
 Wi-Fi AMSDU
 -------------------------
 
-{IDF_TARGET_NAME} 支持接收和发送 AMSDU。
+.. only:: esp32c3
+
+    {IDF_TARGET_NAME} 支持接收 AMSDU。
+
+.. only:: esp32
+
+    {IDF_TARGET_NAME} 支持接收和发送 AMSDU。开启 AMSDU 发送比较消耗内存，默认不开启 AMSDU 发送。可通过选项 :ref:`CONFIG_ESP32_WIFI_AMSDU_TX_ENABLED` 使能 AMSDU 发送功能， 但是使能 AMSDU 发送依赖于 :ref:`CONFIG_ESP32_SPIRAM_SUPPORT` 。
+
+.. only:: esp32s2
+
+    {IDF_TARGET_NAME} 支持接收和发送 AMSDU。开启 AMSDU 发送比较消耗内存，默认不开启 AMSDU 发送。可通过选项 :ref:`CONFIG_ESP32_WIFI_AMSDU_TX_ENABLED` 使能 AMSDU 发送功能， 但是使能 AMSDU 发送依赖于 :ref:`CONFIG_ESP32S2_SPIRAM_SUPPORT` 。
+
 
 Wi-Fi 分片
 -------------------------

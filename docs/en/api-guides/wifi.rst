@@ -9,7 +9,7 @@ Wi-Fi Driver
 - Support station-only mode, AP-only mode, station/AP-coexistence mode
 - Support IEEE 802.11b, IEEE 802.11g, IEEE 802.11n, and APIs to configure the protocol mode
 - Support WPA/WPA2/WPA3/WPA2-Enterprise and WPS
-- Support AMPDU, HT40, QoS and other key features
+- Support AMSDU, AMPDU, HT40, QoS and other key features
 - Support Modem-sleep
 - Support an Espressif-specific protocol which, in turn, supports up to **1 km** of data traffic
 - Up to 20 MBit/s TCP throughput and 30 MBit/s UDP throughput over the air
@@ -747,7 +747,7 @@ Four-way Handshake Phase
 Wi-Fi Reason Code
 +++++++++++++++++++++
 
-The table below shows the reason-code defined in {IDF_TARGET_NAME}. The first column is the macro name defined in esp_wifi_types.h. The common prefix *WIFI_REASON* is removed, which means that *UNSPECIFIED* actually stands for *WIFI_REASON_UNSPECIFIED* and so on. The second column is the value of the reason. The third column is the standard value to which this reason is mapped in section 8.4.1.7 of IEEE 802.11-2012. (For more information, refer to the standard mentioned above.) The last column is a description of the reason.
+The table below shows the reason-code defined in {IDF_TARGET_NAME}. The first column is the macro name defined in esp_wifi_types.h. The common prefix *WIFI_REASON* is removed, which means that *UNSPECIFIED* actually stands for *WIFI_REASON_UNSPECIFIED* and so on. The second column is the value of the reason. The third column is the standard value to which this reason is mapped in section 9.4.1.7 of IEEE 802.11-2020. (For more information, refer to the standard mentioned above.) The last column describes the reason.
 
 .. list-table::
    :header-rows: 1
@@ -977,6 +977,102 @@ The table below shows the reason-code defined in {IDF_TARGET_NAME}. The first co
        For the ESP station, this reason is reported when:
 
        - it is received from the AP.
+   * - TDLS_PEER_UNREACHABLE
+     - 25
+     - 25
+     - TDLS direct-link teardown due to TDLS peer STA unreachable via the TDLS direct link.
+   * - TDLS_UNSPECIFIED
+     - 26
+     - 26
+     - TDLS direct-link teardown for unspecified reason.
+   * - SSP_REQUESTED_DISASSOC
+     - 27
+     - 27
+     - Disassociated because session terminated by SSP request.
+   * - NO_SSP_ROAMING_AGREEMENT
+     - 28
+     - 28
+     - Disassociated because of lack of SSP roaming agreement.
+   * - BAD_CIPHER_OR_AKM
+     - 29
+     - 29
+     - Requested service rejected because of SSP cipher suite or AKM requirement.
+   * - NOT_AUTHORIZED_THIS_LOCATION
+     - 30
+     - 30
+     - Requested service not authorized in this location.
+   * - SERVICE_CHANGE_PRECLUDES_TS
+     - 31
+     - 31
+     - TS deleted because QoS AP lacks sufficient bandwidth for this QoS STA due to a change in BSS service characteristics or operational mode (e.g., an HT BSS change from 40 MHz channel to 20 MHz channel).
+   * - UNSPECIFIED_QOS
+     - 32
+     - 32
+     - Disassociated for unspecified, QoS-related reason.
+   * - NOT_ENOUGH_BANDWIDTH
+     - 33
+     - 33
+     - Disassociated because QoS AP lacks sufficient bandwidth for this QoS STA.
+   * - MISSING_ACKS
+     - 34
+     - 34
+     - Disassociated because excessive number of frames need to be acknowledged, but are not acknowledged due to AP transmissions and/or poor channel conditions.
+   * - EXCEEDED_TXOP
+     - 35
+     - 35
+     - Disassociated because STA is transmitting outside the limits of its TXOPs.
+   * - STA_LEAVING
+     - 36
+     - 36
+     - Requesting STA is leaving the BSS (or resetting).
+   * - END_BA
+     - 37
+     - 37
+     - Requesting STA is no longer using the stream or session.
+   * - UNKNOWN_BA
+     - 38
+     - 38
+     - Requesting STA received frames using a mechanism for which a setup has not been completed.
+   * - TIMEOUT
+     - 39
+     - 39
+     - Requested from peer STA due to timeout
+   * - Reserved
+     - 40 ~ 45
+     - 40 ~ 45
+     - 
+   * - PEER_INITIATED
+     - 46
+     - 46
+     - In a Disassociation frame: Disassociated because authorized access limit reached.
+   * - AP_INITIATED
+     - 47
+     - 47
+     - In a Disassociation frame: Disassociated due to external service requirements.
+   * - INVALID_FT_ACTION_FRAME_COUNT
+     - 48
+     - 48
+     - Invalid FT Action frame count.
+   * - INVALID_PMKID
+     - 49
+     - 49
+     - Invalid pairwise master key identifier (PMKID).
+   * - INVALID_MDE
+     - 50
+     - 50
+     - Invalid MDE.
+   * - INVALID_FTE
+     - 51
+     - 51
+     - Invalid FTE
+   * - TRANSMISSION_LINK_ESTABLISHMENT_FAILED
+     - 67
+     - 67
+     - Transmission link establishment in alternative channel failed.
+   * - ALTERATIVE_CHANNEL_OCCUPIED
+     - 68
+     - 68
+     - The alternative channel is occupied.
    * - BEACON_TIMEOUT
      - 200
      - reserved
@@ -1001,6 +1097,51 @@ The table below shows the reason-code defined in {IDF_TARGET_NAME}. The first co
      - 205
      - reserved
      - Espressif-specific Wi-Fi reason-code: the connection to the AP has failed.
+
+Wi-Fi Reason code related to wrong password
+++++++++++++++++++++++++++++++++++++++++++++++
+
+The table below shows the Wi-Fi reason-code may related to wrong password.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 5 10 40
+
+   * - Reason code
+     - Value
+     - Description
+   * - 4WAY_HANDSHAKE_TIMEOUT
+     - 15
+     - Four-way handshake times out. Setting wrong password when STA connecting to an encrpyted AP.
+   * - NO_AP_FOUND
+     - 201
+     - This may related to wrong password in the two scenarios:
+
+       - Setting password when STA connecting to an unencrypted AP.
+       - Doesn't setting password when STA connecting to an encrypted AP.
+   * - HANDSHAKE_TIMEOUT
+     - 204
+     - Four-way handshake fails.
+
+Wi-Fi Reason code related to low RSSI
+++++++++++++++++++++++++++++++++++++++++++++++
+
+The table below shows the Wi-Fi reason-code may related to low RSSI.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 5 10 40
+
+   * - Reason code
+     - Value
+     - Description
+   * - NO_AP_FOUND
+     - 201
+     - The station fails to scan the target AP due to low RSSI
+   * - HANDSHAKE_TIMEOUT
+     - 204
+     - Four-way handshake fails.
+
 
 {IDF_TARGET_NAME} Wi-Fi Station Connecting When Multiple APs Are Found
 ----------------------------------------------------------------------
@@ -1056,7 +1197,7 @@ Call :cpp:func:`esp_wifi_set_mode()` to set the Wi-Fi mode.
 Station Basic Configuration
 +++++++++++++++++++++++++++++++++++++
 
-API esp_wifi_set_config() can be used to configure the station. The table below describes the fields in detail.
+API :cpp:func:`esp_wifi_set_config()` can be used to configure the station. And the configuration will be stored in NVS. The table below describes the fields in detail.
 
 .. list-table::
    :header-rows: 1
@@ -1075,7 +1216,7 @@ API esp_wifi_set_config() can be used to configure the station. The table below 
    * - bssid
      - This is valid only when bssid_set is 1; see field “bssid_set”.
    * - channel
-     - If the channel is 0, the station scans the channel 1 ~ N to search for the target AP; otherwise, the station starts by scanning the channel whose value is the same as that of the “channel” field, and then scans others to find the target AP. If you do not know which channel the target AP is running on, set it to 0.
+     - If the channel is 0, the station scans the channel 1 ~ N to search for the target AP; otherwise, the station starts by scanning the channel whose value is the same as that of the “channel” field, and then scans the channel 1 ~ N but skip the specific channel to find the target AP. For example, if the channel is 3, the scan order will be 3, 1, 2, 4,..., N. If you do not know which channel the target AP is running on, set it to 0.
    * - sort_method
      - This field is only for WIFI_ALL_CHANNEL_SCAN.
 
@@ -1093,7 +1234,7 @@ API esp_wifi_set_config() can be used to configure the station. The table below 
 AP Basic Configuration
 +++++++++++++++++++++++++++++++++++++
 
-API esp_wifi_set_config() can be used to configure the AP. The table below describes the fields in detail.
+API :cpp:func:`esp_wifi_set_config()` can be used to configure the AP. And the configuration will be stored in NVS. The table below describes the fields in detail.
 
 .. list-table::
    :header-rows: 1
@@ -1211,7 +1352,7 @@ When to Use LR
 
 The general conditions for using LR are:
 
- - Both the AP and station are devices.
+ - Both the AP and station are Espressif devices.
  - Long distance Wi-Fi connection and data transmission is required.
  - Data throughput requirements are very small, such as remote device control, etc.
 
@@ -1233,7 +1374,7 @@ Call :cpp:func:`esp_wifi_set_country()` to set the country info. The table below
        - an ASCII ‘O’ character if the regulations under which the station/AP is operating are for an outdoor environment only.
        - an ASCII ‘I’ character if the regulations under which the station/AP is operating are for an indoor environment only.
        - an ASCII ‘X’ character if the station/AP is operating under a noncountry entity. The first two octets of the noncountry entity is two ASCII ‘XX’ characters.
-       - the binary representation of the Operating Class table number currently in use. Refer to Annex E, IEEE Std 802.11-2012.
+       - the binary representation of the Operating Class table number currently in use. Refer to Annex E, IEEE Std 802.11-2020.
 
    * - schan
      - Start channel, it’s the minimum channel number of the regulations under which the station/AP can operate.
@@ -1242,7 +1383,33 @@ Call :cpp:func:`esp_wifi_set_country()` to set the country info. The table below
    * - policy
      - Country policy, this field control which country info will be used if the configured country info is conflict with the connected AP’s. More description about policy is provided in following section.
 
-The default country info is {.cc="CN", .schan=1, .nchan=13, policy=WIFI_COUNTRY_POLICY_AUTO}, if the Wi-Fi Mode is station/AP coexist mode, they share the same configured country info. Sometimes, the country info of AP, to which the station is connected, is different from the country info of configured. For example, the configured station has country info {.cc="JP", .schan=1, .nchan=14, policy=WIFI_COUNTRY_POLICY_AUTO}, but the connected AP has country info {.cc="CN", .schan=1, .nchan=13}, then country info of connected AP's is used.
+The default country info is::
+
+    wifi_country_t config = {
+        .cc = "CN",
+        .schan = 1,
+        .nchan = 13,
+        .policy = WIFI_COUNTRY_POLICY_AUTO,
+    };
+
+If the Wi-Fi Mode is station/AP coexist mode, they share the same configured country info. Sometimes, the country info of AP, to which the station is connected, is different from the country info of configured. For example, the configured station has country info::
+
+    wifi_country_t config = {
+        .cc = "JP",
+        .schan = 1,
+        .nchan = 14,
+        .policy = WIFI_COUNTRY_POLICY_AUTO,
+    };
+
+but the connected AP has country info::
+
+    wifi_country_t config = {
+        .cc = "CN",
+        .schan = 1,
+        .nchan = 13,
+    };
+
+then country info of connected AP's is used.
 
 Following table depicts which country info is used in different Wi-Fi Mode and different country policy, also describe the impact to active scan.
 
@@ -1255,34 +1422,40 @@ Following table depicts which country info is used in different Wi-Fi Mode and d
      - Description
    * - Station
      - WIFI_COUNTRY_POLICY_AUTO
-     - If the connected AP has country IE in its beacon, the country info equals to the country info in beacon, otherwise, use default country info.
+     - If the connected AP has country IE in its beacon, the country info equals to the country info in beacon. Otherwise, use the default country info.
 
        For scan:
 
-       - If schan+nchan-1 >11 :
-
-         Use active scan from schan to 11 and use passive scan from 12 to schan+nchan-1.
-
-       - If schan+nchan-1 <= 11 :
-
-         Use active scan from schan to schan+nchan-1.
+         Use active scan from 1 to 11 and use passive scan from 12 to 14.
 
        Always keep in mind that if an AP with hidden SSID and station is set to a passive scan channel, the passive scan will not find it. In other words, if the application hopes to find the AP with hidden SSID in every channel, the policy of country info should be configured to WIFI_COUNTRY_POLICY_MANUAL.
 
    * - Station
      - WIFI_COUNTRY_POLICY_MANUAL
-     - Always use the configured country info. For scan, scans channel “schan” to “schan+nchan-1” with active scan.
+     - Always use the configured country info.
+
+       For scan:
+
+         Use active scan from schan to schan+nchan-1.
+
    * - AP
      - WIFI_COUNTRY_POLICY_AUTO
      - Always use the configured country info.
+
    * - AP
      - WIFI_COUNTRY_POLICY_MANUAL
      - Always use the configured country info.
+
    * - Station/AP-coexistence
      - WIFI_COUNTRY_POLICY_AUTO
-     - If the station doesn’t connects to any external AP, the AP use the configured country info. If the station connects to an external AP, the AP has the same country info as the station.
+     - Station: Same as station mode with policy WIFI_COUNTRY_POLICY_AUTO.
+       AP: If the station does not connect to any external AP, the AP uses the configured country info. If the station connects to an external AP, the AP has the same country info as the station.
 
-       Same as station mode with policy WIFI_COUNTRY_POLICY_AUTO.
+   * - Station/AP-coexistence
+     - WIFI_COUNTRY_POLICY_MANUAL
+     - Station: Same as station mode with policy WIFI_COUNTRY_POLICY_MANUAL.
+       AP: Same as AP mode with policy WIFI_COUNTRY_POLICY_MANUAL.
+
 
 Home Channel
 *************************
@@ -1337,7 +1510,7 @@ Current implementation of 802.11k includes support for beacon measurement report
 
 Refer IDF example :idf_file:`examples/wifi/roaming/README.md` to set up and use these APIs. Example code only demonstrates how these APIs can be used, the application should define its own algorithm and cases as required.
 
-.. only:: esp32s2 or esp32c3
+.. only:: SOC_WIFI_FTM_SUPPORT
 
     Wi-Fi Location
     -------------------------------
@@ -1781,7 +1954,17 @@ Theoretically the higher priority AC has better performance than the low priorit
 Wi-Fi AMSDU
 -------------------------
 
-{IDF_TARGET_NAME} supports receiving and transmitting AMSDU.
+.. only:: esp32c3
+
+    {IDF_TARGET_NAME} supports receiving AMSDU.
+
+.. only:: esp32
+
+    {IDF_TARGET_NAME} supports receiving and transmitting AMSDU. AMSDU TX is disabled by default, since enable AMSDU TX need more memory. Select :ref:`CONFIG_ESP32_WIFI_AMSDU_TX_ENABLED` to enable AMSDU Tx feature, it depends on :ref:`CONFIG_ESP32_SPIRAM_SUPPORT`.
+
+.. only:: esp32s2
+
+    {IDF_TARGET_NAME} supports receiving and transmitting AMSDU. AMSDU TX is disabled by default, since enable AMSDU TX need more memory. Select :ref:`CONFIG_ESP32_WIFI_AMSDU_TX_ENABLED` to enable AMSDU Tx feature, it depends on :ref:`CONFIG_ESP32S2_SPIRAM_SUPPORT`.
 
 Wi-Fi Fragment
 -------------------------

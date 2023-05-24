@@ -26,10 +26,11 @@
 #include "soc/timer_group_reg.h"
 #include "soc/system_reg.h"
 #include "soc/rtc.h"
+#include "soc/chip_revision.h"
 #include "esp32c3/rom/ets_sys.h"
 #include "esp32c3/rom/rtc.h"
 #include "regi2c_ctrl.h"
-#include "esp_efuse.h"
+#include "hal/efuse_hal.h"
 
 /**
  * Configure whether certain peripherals are powered down in deep sleep
@@ -101,11 +102,11 @@ void rtc_sleep_init(rtc_sleep_config_t cfg)
         REGI2C_WRITE_MASK(I2C_ULP, I2C_ULP_IR_FORCE_XPD_CK, 0);
         CLEAR_PERI_REG_MASK(RTC_CNTL_REG, RTC_CNTL_REGULATOR_FORCE_PU);
         unsigned atten_deep_sleep = RTC_CNTL_DBG_ATTEN_DEEPSLEEP_DEFAULT;
-    #if CONFIG_ESP32C3_REV_MIN < 3
-        if (esp_efuse_get_chip_ver() < 3) {
+#if CONFIG_ESP32C3_REV_MIN_FULL < 3
+        if (!ESP_CHIP_REV_ABOVE(efuse_hal_chip_revision(), 3)) {
             atten_deep_sleep = 0; /* workaround for deep sleep issue in high temp on ECO2 and below */
         }
-    #endif
+#endif
         REG_SET_FIELD(RTC_CNTL_BIAS_CONF_REG, RTC_CNTL_DBG_ATTEN_DEEP_SLP, atten_deep_sleep);
         SET_PERI_REG_MASK(RTC_CNTL_DIG_PWC_REG, RTC_CNTL_DG_WRAP_PD_EN);
         CLEAR_PERI_REG_MASK(RTC_CNTL_ANA_CONF_REG,
@@ -121,9 +122,7 @@ void rtc_sleep_init(rtc_sleep_config_t cfg)
                 cfg.int_8m_pd_en ? RTC_CNTL_DBG_ATTEN_LIGHTSLEEP_DEFAULT : RTC_CNTL_DBG_ATTEN_LIGHTSLEEP_NODROP);
     }
 
-    //Keep the RTC8M_CLK on in light_sleep mode if the ledc low-speed channel is clocked by RTC8M_CLK.
-    if (!cfg.int_8m_pd_en && GET_PERI_REG_MASK(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_DIG_CLK8M_EN_M)) {
-        CLEAR_PERI_REG_MASK(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_CK8M_FORCE_PD);
+    if (!cfg.int_8m_pd_en) {
         SET_PERI_REG_MASK(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_CK8M_FORCE_PU);
         SET_PERI_REG_MASK(RTC_CNTL_CLK_CONF_REG, RTC_CNTL_CK8M_FORCE_NOGATING);
     } else {

@@ -28,6 +28,7 @@
 #include "soc/rtc.h"
 #include "soc/syscon_reg.h"
 #include "hal/wdt_hal.h"
+#include "hal/efuse_hal.h"
 #include "freertos/xtensa_api.h"
 
 /* "inner" restart function for after RTOS, interrupts & anything else on this
@@ -89,11 +90,19 @@ void IRAM_ATTR esp_restart_noos(void)
     WRITE_PERI_REG(GPIO_FUNC5_IN_SEL_CFG_REG, 0x30);
 
     // Reset wifi/bluetooth/ethernet/sdio (bb/mac)
-    SET_PERI_REG_MASK(SYSTEM_CORE_RST_EN_REG,
-                      SYSTEM_BB_RST | SYSTEM_FE_RST | SYSTEM_MAC_RST |
-                      SYSTEM_BT_RST | SYSTEM_BTMAC_RST | SYSTEM_SDIO_RST |
-                      SYSTEM_SDIO_HOST_RST | SYSTEM_EMAC_RST | SYSTEM_MACPWR_RST |
-                      SYSTEM_RW_BTMAC_RST | SYSTEM_RW_BTLP_RST | SYSTEM_BLE_REG_RST | SYSTEM_PWR_REG_RST | SYSTEM_BB_REG_RST);
+    SET_PERI_REG_MASK(SYSTEM_CORE_RST_EN_REG, SYSTEM_WIFIBB_RST       | \
+                                              SYSTEM_FE_RST           | \
+                                              SYSTEM_WIFIMAC_RST      | \
+                                              SYSTEM_BTBB_RST         | \
+                                              SYSTEM_BTMAC_RST        | \
+                                              SYSTEM_SDIO_RST         | \
+                                              SYSTEM_EMAC_RST         | \
+                                              SYSTEM_MACPWR_RST       | \
+                                              SYSTEM_RW_BTMAC_RST     | \
+                                              SYSTEM_RW_BTLP_RST      | \
+                                              SYSTEM_RW_BTMAC_REG_RST | \
+                                              SYSTEM_RW_BTLP_REG_RST  | \
+                                              SYSTEM_BTBB_REG_RST);
     REG_WRITE(SYSTEM_CORE_RST_EN_REG, 0);
 
     // Reset timer/spi/uart
@@ -144,6 +153,7 @@ void esp_chip_info(esp_chip_info_t *out_info)
 {
     memset(out_info, 0, sizeof(*out_info));
     out_info->model = CHIP_ESP32S3;
+    out_info->full_revision = efuse_hal_chip_revision();
     out_info->cores = 2;
     out_info->features = CHIP_FEATURE_WIFI_BGN;
 }

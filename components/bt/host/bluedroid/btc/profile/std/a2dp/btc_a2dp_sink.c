@@ -85,7 +85,6 @@ enum {
 
 /* 18 frames is equivalent to 6.89*18*2.9 ~= 360 ms @ 44.1 khz, 20 ms mediatick */
 #define MAX_OUTPUT_A2DP_SNK_FRAME_QUEUE_SZ     (25)
-#define JITTER_BUFFER_WATER_LEVEL (5)
 
 #define BTC_A2DP_SNK_DATA_QUEUE_IDX            (1)
 
@@ -423,7 +422,8 @@ static void btc_a2dp_sink_handle_decoder_reset(tBTC_MEDIA_SINK_CFG_UPDATE *p_msg
     a2dp_sink_local_param.btc_aa_snk_cb.rx_flush = FALSE;
     APPL_TRACE_EVENT("Reset to sink role");
     status = OI_CODEC_SBC_DecoderReset(&a2dp_sink_local_param.context, a2dp_sink_local_param.contextData,
-                                        sizeof(a2dp_sink_local_param.contextData), 2, 2, FALSE, FALSE);
+                                        sizeof(a2dp_sink_local_param.contextData), a2dp_sink_local_param.btc_aa_snk_cb.channel_count,
+                                        a2dp_sink_local_param.btc_aa_snk_cb.channel_count, FALSE, FALSE);
     if (!OI_SUCCESS(status)) {
         APPL_TRACE_ERROR("OI_CODEC_SBC_DecoderReset failed with error code %d\n", status);
     }
@@ -695,9 +695,7 @@ UINT8 btc_a2dp_sink_enque_buf(BT_HDR *p_pkt)
         p_msg->num_frames_to_be_processed = (*((UINT8 *)(p_msg + 1) + p_msg->offset)) & 0x0f;
         APPL_TRACE_VERBOSE("btc_a2dp_sink_enque_buf %d + \n", p_msg->num_frames_to_be_processed);
         fixed_queue_enqueue(a2dp_sink_local_param.btc_aa_snk_cb.RxSbcQ, p_msg, FIXED_QUEUE_MAX_TIMEOUT);
-        if (fixed_queue_length(a2dp_sink_local_param.btc_aa_snk_cb.RxSbcQ) >= JITTER_BUFFER_WATER_LEVEL) {
-            osi_thread_post_event(a2dp_sink_local_param.btc_aa_snk_cb.data_ready_event, OSI_THREAD_MAX_TIMEOUT);
-        }
+        osi_thread_post_event(a2dp_sink_local_param.btc_aa_snk_cb.data_ready_event, OSI_THREAD_MAX_TIMEOUT);
     } else {
         /* let caller deal with a failed allocation */
         APPL_TRACE_WARNING("btc_a2dp_sink_enque_buf No Buffer left - ");
