@@ -131,6 +131,7 @@ struct esp_netif_obj {
     char * if_key;
     char * if_desc;
     int route_prio;
+    uint8_t ifdex_dns;
 };
 
 #endif /* CONFIG_ESP_NETIF_TCPIP_LWIP */

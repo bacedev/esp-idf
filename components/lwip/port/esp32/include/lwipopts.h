@@ -358,7 +358,10 @@ static inline uint32_t timeout_from_offered(uint32_t lease, uint32_t min)
  */
 #define LWIP_DNS                        1
 
-#define DNS_MAX_SERVERS                 3
+#define DNS_MAX_SERVERS                 5
+#define DNS_WIFI_SERVER_START_INDEX     0
+#define DNS_ETH_SERVER_START_INDEX      2
+
 #define DNS_FALLBACK_SERVER_INDEX        (DNS_MAX_SERVERS - 1)
 
 /*
@@ -1019,6 +1022,7 @@ static inline uint32_t timeout_from_offered(uint32_t lease, uint32_t min)
 #define ESP_LWIP_SELECT                 1
 #define ESP_LWIP_LOCK                   1
 #define ESP_THREAD_PROTECTION           1
+#define ESP_MULTIPLE_DNS                1
 #define ESP_IP_FORWARD                  1
 
 #ifdef CONFIG_LWIP_IPV6_AUTOCONFIG

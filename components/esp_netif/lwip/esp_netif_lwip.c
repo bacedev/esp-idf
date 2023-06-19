@@ -390,6 +390,7 @@ static esp_err_t esp_netif_init_configuration(esp_netif_t *esp_netif, const esp_
         esp_netif->route_prio = cfg->base->route_prio;
     }
 
+    esp_netif->ifdex_dns = cfg->base->ifdex_dns;
     // Install network stack functions -- connects netif and L3 stack
     const esp_netif_netstack_config_t *esp_netif_stack_config = cfg->stack;
     if (cfg->base->flags & ESP_NETIF_FLAG_IS_PPP) {
@@ -1068,7 +1069,8 @@ static esp_err_t esp_netif_dhcpc_start_api(esp_netif_api_msg_t *msg)
     esp_netif_reset_ip_info(esp_netif);
 
 #if LWIP_DNS
-    dns_clear_servers(true);
+    dns_setserver(esp_netif->ifdex_dns, NULL);
+    dns_setserver(esp_netif->ifdex_dns + 1, NULL);
 #endif
 
     if (p_netif != NULL) {
@@ -1296,6 +1298,8 @@ static esp_err_t esp_netif_down_api(esp_netif_api_msg_t *msg)
 
     if (esp_netif->flags & ESP_NETIF_DHCP_CLIENT && esp_netif->dhcpc_status == ESP_NETIF_DHCP_STARTED) {
         dhcp_stop(esp_netif->lwip_netif);
+        dns_setserver(esp_netif->ifdex_dns, NULL);
+        dns_setserver(esp_netif->ifdex_dns + 1, NULL);
 
         esp_netif->dhcpc_status = ESP_NETIF_DHCP_INIT;
 
@@ -1404,6 +1408,7 @@ static esp_err_t esp_netif_set_ip_info_api(esp_netif_api_msg_t *msg)
 {
     esp_netif_t *esp_netif = msg->esp_netif;
     const esp_netif_ip_info_t *ip_info = msg->data;
+    struct netif *p_netif = esp_netif->lwip_netif;
 
     ESP_LOGD(TAG, "%s esp_netif:%p", __func__, esp_netif);
 
@@ -1420,7 +1425,8 @@ static esp_err_t esp_netif_set_ip_info_api(esp_netif_api_msg_t *msg)
             return ESP_ERR_ESP_NETIF_DHCP_NOT_STOPPED;
         }
 #if LWIP_DNS /* don't build if not configured for use in lwipopts.h */
-        dns_clear_servers(true);
+        dns_setserver(esp_netif->ifdex_dns, NULL);
+        dns_setserver(esp_netif->ifdex_dns + 1, NULL);
 #endif
     }
 
@@ -1428,7 +1434,6 @@ static esp_err_t esp_netif_set_ip_info_api(esp_netif_api_msg_t *msg)
     ip4_addr_copy(esp_netif->ip_info->gw, ip_info->gw);
     ip4_addr_copy(esp_netif->ip_info->netmask, ip_info->netmask);
 
-    struct netif *p_netif = esp_netif->lwip_netif;
 
     if (p_netif != NULL && netif_is_up(p_netif)) {
         netif_set_addr(p_netif, (ip4_addr_t*)&ip_info->ip, (ip4_addr_t*)&ip_info->netmask, (ip4_addr_t*)&ip_info->gw);
@@ -1493,13 +1498,7 @@ static esp_err_t esp_netif_set_dns_info_api(esp_netif_api_msg_t *msg)
 #endif
     if (esp_netif->flags & ESP_NETIF_DHCP_SERVER) {
 #if ESP_DHCPS
-        // if DHCP server configured to set DNS in dhcps API
-        if (type != ESP_NETIF_DNS_MAIN) {
-            ESP_LOGD(TAG, "set dns invalid type");
-            return ESP_ERR_ESP_NETIF_INVALID_PARAMS;
-        } else {
-            dhcps_dns_setserver(lwip_ip);
-        }
+        dhcps_dns_setserver(lwip_ip);
 #else
         LOG_NETIF_DISABLED_AND_DO("DHCP Server", return ESP_ERR_NOT_SUPPORTED);
 #endif

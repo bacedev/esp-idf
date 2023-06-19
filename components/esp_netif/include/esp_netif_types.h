@@ -43,10 +43,13 @@ typedef struct esp_netif_obj esp_netif_t;
 
 
 /** @brief Type of DNS server */
-typedef enum {
-    ESP_NETIF_DNS_MAIN= 0,       /**< DNS main server address*/
-    ESP_NETIF_DNS_BACKUP,        /**< DNS backup server address (Wi-Fi STA and Ethernet only) */
-    ESP_NETIF_DNS_FALLBACK,      /**< DNS fallback server address (Wi-Fi STA and Ethernet only) */
+typedef enum
+{
+    ESP_NETIF_WIFI_DNS_MAIN = 0, /**< DNS main server address*/
+    ESP_NETIF_WIFI_DNS_BACKUP,   /**< DNS main server address*/
+    ESP_NETIF_ETH_DNS_MAIN,      /**< DNS backup server address (Wi-Fi STA and Ethernet only) */
+    ESP_NETIF_ETH_DNS_BACKUP,
+    ESP_NETIF_DNS_FALLBACK, /**< DNS fallback server address (Wi-Fi STA and Ethernet only) */
     ESP_NETIF_DNS_MAX
 } esp_netif_dns_type_t;
 
@@ -168,6 +171,7 @@ typedef struct esp_netif_inherent_config {
                                           routing if (if other netifs are up).
                                           A higher value of route_prio indicates
                                           a higher priority */
+    uint8_t ifdex_dns;
 } esp_netif_inherent_config_t;
 
 typedef struct esp_netif_config esp_netif_config_t;
