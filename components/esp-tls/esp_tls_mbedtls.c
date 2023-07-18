@@ -730,7 +730,11 @@ static esp_err_t esp_set_atecc608a_pki_context(esp_tls_t *tls, esp_tls_cfg_t *cf
         return ESP_FAIL;
     }
 #endif /* CONFIG_ATECC608A_TCUSTOM */
+#ifdef CONFIG_ATECC608A_CLIENT_KEY_ID_SLOT
+    ret = atca_mbedtls_pk_init(&tls->clientkey, CONFIG_ATECC608A_CLIENT_KEY_ID_SLOT);
+#else
     ret = atca_mbedtls_pk_init(&tls->clientkey, 0);
+#endif
     if (ret != 0) {
         ESP_LOGE(TAG, "Failed to parse key from device");
         ESP_INT_EVENT_TRACKER_CAPTURE(tls->error_handle, ESP_TLS_ERR_TYPE_MBEDTLS, -ret);
