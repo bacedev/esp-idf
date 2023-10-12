@@ -32,7 +32,8 @@ extern "C" {
         .lost_ip_event = IP_EVENT_STA_LOST_IP, \
         .if_key = "WIFI_STA_DEF", \
         .if_desc = "sta", \
-        .route_prio = 100 \
+        .route_prio = 100, \
+        .ifdex_dns = 0\
      }  \
 
 #ifdef CONFIG_ESP_WIFI_SOFTAP_SUPPORT
@@ -45,7 +46,8 @@ extern "C" {
         .lost_ip_event = 0, \
         .if_key = "WIFI_AP_DEF", \
         .if_desc = "ap", \
-        .route_prio = 10 \
+        .route_prio = 10, \
+        .ifdex_dns = 10 \
     };
 #endif
 
@@ -58,7 +60,8 @@ extern "C" {
         .lost_ip_event = IP_EVENT_ETH_LOST_IP, \
         .if_key = "ETH_DEF", \
         .if_desc = "eth", \
-        .route_prio = 50 \
+        .route_prio = 50, \
+        .ifdex_dns = 2\
     };
 
 #define ESP_NETIF_INHERENT_DEFAULT_PPP() \
@@ -70,7 +73,8 @@ extern "C" {
         .lost_ip_event = IP_EVENT_PPP_LOST_IP,  \
         .if_key = "PPP_DEF",    \
         .if_desc = "ppp",   \
-        .route_prio = 20   \
+        .route_prio = 20,   \
+        .ifdex_dns = 11\
 };
 
 #define ESP_NETIF_INHERENT_DEFAULT_OPENTHREAD() \
@@ -82,7 +86,8 @@ extern "C" {
         .lost_ip_event = 0,   \
         .if_key = "OT_DEF",  \
         .if_desc = "openthread",    \
-        .route_prio = 15      \
+        .route_prio = 15,      \
+        .ifdex_dns = 5 \
 };
 
 #define ESP_NETIF_INHERENT_DEFAULT_SLIP() \
@@ -94,7 +99,8 @@ extern "C" {
         .lost_ip_event = 0,   \
         .if_key = "SLP_DEF",  \
         .if_desc = "slip",    \
-        .route_prio = 16      \
+        .route_prio = 16,     \
+        .ifdex_dns = 12 \
 };
 
 
