@@ -383,6 +383,19 @@ esp_err_t esp_ble_gap_set_device_name(const char *name)
     return esp_bt_dev_set_device_name(name);
 }
 
+esp_err_t esp_ble_gap_get_device_name(void)
+{
+    btc_msg_t msg = {0};
+
+    ESP_BLUEDROID_STATUS_CHECK(ESP_BLUEDROID_STATUS_ENABLED);
+
+    msg.sig = BTC_SIG_API_CALL;
+    msg.pid = BTC_PID_GAP_BLE;
+    msg.act = BTC_GAP_BLE_ACT_GET_DEV_NAME;
+
+    return (btc_transfer_context(&msg, NULL, 0, NULL, NULL) == BT_STATUS_SUCCESS ? ESP_OK : ESP_FAIL);
+}
+
 esp_err_t esp_ble_gap_get_local_used_addr(esp_bd_addr_t local_used_addr, uint8_t * addr_type)
 {
     if(esp_bluedroid_get_status() != (ESP_BLUEDROID_STATUS_ENABLED)) {
@@ -418,8 +431,7 @@ esp_err_t esp_ble_gap_config_adv_data_raw(uint8_t *raw_data, uint32_t raw_data_l
 
     ESP_BLUEDROID_STATUS_CHECK(ESP_BLUEDROID_STATUS_ENABLED);
 
-    if (raw_data == NULL
-            || (raw_data_len <= 0 || raw_data_len > ESP_BLE_ADV_DATA_LEN_MAX)) {
+    if ((raw_data_len != 0 && raw_data == NULL) || raw_data_len > ESP_BLE_ADV_DATA_LEN_MAX) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -868,10 +880,10 @@ esp_err_t esp_ble_gap_ext_adv_set_params(uint8_t instance,
         ESP_BLE_IS_VALID_PARAM(params->peer_addr_type, BLE_ADDR_TYPE_PUBLIC, BLE_ADDR_TYPE_RANDOM) &&
         ESP_BLE_IS_VALID_PARAM(params->own_addr_type, BLE_ADDR_TYPE_PUBLIC, BLE_ADDR_TYPE_RPA_RANDOM) &&
         ESP_BLE_IS_VALID_PARAM(params->filter_policy, ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY, ADV_FILTER_ALLOW_SCAN_WLST_CON_WLST) &&
-        (params->interval_min <= params->interval_max) && ((params->channel_map & ADV_CHNL_ALL) == ADV_CHNL_ALL) &&
+        (params->interval_min <= params->interval_max) && (params->channel_map > 0) && (params->channel_map <= ADV_CHNL_ALL) &&
         ((params->primary_phy == ESP_BLE_GAP_PRI_PHY_1M) || (params->primary_phy == ESP_BLE_GAP_PRI_PHY_CODED)) &&
         ((params->secondary_phy == ESP_BLE_GAP_PHY_1M) || (params->secondary_phy == ESP_BLE_GAP_PHY_2M) ||
-        (params->secondary_phy == ESP_BLE_GAP_PHY_CODED)) && (params->channel_map != 0x0)){
+        (params->secondary_phy == ESP_BLE_GAP_PHY_CODED))){
         memcpy(&arg.ext_adv_set_params.params, params, sizeof(esp_ble_gap_ext_adv_params_t));
     } else {
         LOG_ERROR("%s,invalid ext adv params", __func__);

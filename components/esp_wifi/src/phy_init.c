@@ -233,6 +233,11 @@ static inline void phy_digital_regs_load(void)
     }
 }
 
+bool esp_phy_is_initialized(void)
+{
+    return s_is_phy_calibrated;
+}
+
 void esp_phy_enable(void)
 {
     _lock_acquire(&s_phy_access_lock);
@@ -718,7 +723,7 @@ void esp_phy_load_cal_and_init(void)
 #endif
 
 #ifdef CONFIG_ESP32_PHY_CALIBRATION_AND_DATA_STORAGE
-    esp_phy_calibration_mode_t calibration_mode = PHY_RF_CAL_PARTIAL;
+    esp_phy_calibration_mode_t calibration_mode = CONFIG_ESP_PHY_CALIBRATION_MODE;
     uint8_t sta_mac[6];
     if (rtc_get_reset_reason(0) == DEEPSLEEP_RESET) {
         calibration_mode = PHY_RF_CAL_NONE;

@@ -224,6 +224,9 @@
 #define SOC_TWAI_BRP_MAX                16384
 #define SOC_TWAI_SUPPORTS_RX_STATUS     1
 
+/*-------------------------- eFuse CAPS----------------------------*/
+#define SOC_EFUSE_BLOCK9_KEY_PURPOSE_QUIRK 1  // AES-XTS key purpose not supported for this block
+
 /*-------------------------- UART CAPS ---------------------------------------*/
 // ESP32-C3 has 2 UARTs
 #define SOC_UART_NUM                (2)
@@ -272,5 +275,5 @@
 
 #define SOC_PM_SUPPORT_BT_PD            (1)
 
-/*------------------------------ BLE --------------------------------------------*/
-#define SOC_BLE_UPDATE_OWN_RPA  (1)
+/* ---------------------------- Bluetooth ------------------------------- */
+#define SOC_BLE_DEVICE_PRIVACY_SUPPORTED    (1)
