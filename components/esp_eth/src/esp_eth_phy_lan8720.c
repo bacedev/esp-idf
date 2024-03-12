@@ -356,6 +356,7 @@ static esp_err_t lan8720_pwrctl(esp_eth_phy_t *phy, bool enable)
             vTaskDelay(pdMS_TO_TICKS(10));
             PHY_CHECK(eth->phy_reg_read(eth, lan8720->addr, ETH_PHY_BMCR_REG_ADDR, &(bmcr.val)) == ESP_OK,
                       "read BMCR failed", err);
+		      ESP_LOGE(TAG, "time: %d - read BMCR powerdown: %d", to, bmcr.power_down);
             if (bmcr.power_down == 0) {
                 break;
             }
