@@ -540,6 +540,13 @@ menu "LWIP"
 
     menu "TCP"
 
+		config LWIP_USE_RANDOM_PORT
+            bool "Choose first port number randomly"
+            default y
+            help
+                Choose the initial port number at random. Further
+                connection will increment the port number each time.
+
         config LWIP_MAX_ACTIVE_TCP
             int "Maximum active TCP Connections"
             range 1 1024
