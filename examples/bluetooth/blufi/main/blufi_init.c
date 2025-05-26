@@ -233,17 +233,21 @@ esp_err_t esp_blufi_host_deinit(void)
 {
     esp_err_t ret = ESP_OK;
 
+    esp_blufi_gatt_svr_deinit();
+    ret = nimble_port_stop();
+    if (ret != ESP_OK) {
+        return ret;
+    }
+    if (ret == 0) {
+        esp_nimble_deinit();
+    }
+
     ret = esp_blufi_profile_deinit();
-    if(ret != ESP_OK) {
+    if (ret != ESP_OK) {
         return ret;
     }
 
     esp_blufi_btc_deinit();
-
-    ret = nimble_port_stop();
-    if (ret == 0) {
-        esp_nimble_deinit();
-    }
 
     return ret;
 }

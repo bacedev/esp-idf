@@ -33,6 +33,7 @@ extern "C" {
 
 #define I2S_LL_CLK_FRAC_DIV_N_MAX  256 // I2S_MCLK = I2S_SRC_CLK / (N + b/a), the N register is 8 bit-width
 #define I2S_LL_CLK_FRAC_DIV_AB_MAX 512 // I2S_MCLK = I2S_SRC_CLK / (N + b/a), the a/b register is 9 bit-width
+#define I2S_LL_SLOT_FRAME_BIT_MAX  128 // Up-to 128 bits in one frame, determined by MAX(half_sample_bits) * 2
 
 #define I2S_LL_PLL_F160M_CLK_FREQ      (160 * 1000000) // PLL_F160M_CLK: 160MHz
 #define I2S_LL_DEFAULT_CLK_FREQ     I2S_LL_PLL_F160M_CLK_FREQ    // The default PLL clock frequency while using I2S_CLK_SRC_DEFAULT
@@ -281,13 +282,21 @@ static inline void i2s_ll_tx_set_bck_div_num(i2s_dev_t *hw, uint32_t val)
 static inline void i2s_ll_tx_set_raw_clk_div(i2s_dev_t *hw, uint32_t div_int, uint32_t x, uint32_t y, uint32_t z, uint32_t yn1)
 {
     (void)hw;
+    /* Workaround for the double division issue.
+     * The division coefficients must be set in particular sequence.
+     * And it has to switch to a small division first before setting the target division. */
+    HAL_FORCE_MODIFY_U32_REG_FIELD(PCR.i2s_tx_clkm_conf, i2s_tx_clkm_div_num, 2);
+    PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_yn1 = 0;
+    PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_y = 1;
+    PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_z = 0;
+    PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_x = 0;
+
+    /* Set the target mclk division coefficients */
+    PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_yn1 = yn1;
+    PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_z = z;
+    PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_y = y;
+    PCR.i2s_tx_clkm_div_conf.i2s_tx_clkm_div_x = x;
     HAL_FORCE_MODIFY_U32_REG_FIELD(PCR.i2s_tx_clkm_conf, i2s_tx_clkm_div_num, div_int);
-    typeof(PCR.i2s_tx_clkm_div_conf) div = {};
-    div.i2s_tx_clkm_div_x = x;
-    div.i2s_tx_clkm_div_y = y;
-    div.i2s_tx_clkm_div_z = z;
-    div.i2s_tx_clkm_div_yn1 = yn1;
-    PCR.i2s_tx_clkm_div_conf.val = div.val;
 }
 
 /**
@@ -303,13 +312,21 @@ static inline void i2s_ll_tx_set_raw_clk_div(i2s_dev_t *hw, uint32_t div_int, ui
 static inline void i2s_ll_rx_set_raw_clk_div(i2s_dev_t *hw, uint32_t div_int, uint32_t x, uint32_t y, uint32_t z, uint32_t yn1)
 {
     (void)hw;
+    /* Workaround for the double division issue.
+     * The division coefficients must be set in particular sequence.
+     * And it has to switch to a small division first before setting the target division. */
+    HAL_FORCE_MODIFY_U32_REG_FIELD(PCR.i2s_rx_clkm_conf, i2s_rx_clkm_div_num, 2);
+    PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_yn1 = 0;
+    PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_y = 1;
+    PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_z = 0;
+    PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_x = 0;
+
+    /* Set the target mclk division coefficients */
+    PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_yn1 = yn1;
+    PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_z = z;
+    PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_y = y;
+    PCR.i2s_rx_clkm_div_conf.i2s_rx_clkm_div_x = x;
     HAL_FORCE_MODIFY_U32_REG_FIELD(PCR.i2s_rx_clkm_conf, i2s_rx_clkm_div_num, div_int);
-    typeof(PCR.i2s_rx_clkm_div_conf) div = {};
-    div.i2s_rx_clkm_div_x = x;
-    div.i2s_rx_clkm_div_y = y;
-    div.i2s_rx_clkm_div_z = z;
-    div.i2s_rx_clkm_div_yn1 = yn1;
-    PCR.i2s_rx_clkm_div_conf.val = div.val;
 }
 
 /**
@@ -320,12 +337,6 @@ static inline void i2s_ll_rx_set_raw_clk_div(i2s_dev_t *hw, uint32_t div_int, ui
  */
 static inline void i2s_ll_tx_set_mclk(i2s_dev_t *hw, const hal_utils_clk_div_t *mclk_div)
 {
-    /* Workaround for inaccurate clock while switching from a relatively low sample rate to a high sample rate
-     * Set to particular coefficients first then update to the target coefficients,
-     * otherwise the clock division might be inaccurate.
-     * the general idea is to set a value that impossible to calculate from the regular decimal */
-    i2s_ll_tx_set_raw_clk_div(hw, 7, 317, 7, 3, 0);
-
     uint32_t div_x = 0;
     uint32_t div_y = 0;
     uint32_t div_z = 0;
@@ -360,12 +371,6 @@ static inline void i2s_ll_rx_set_bck_div_num(i2s_dev_t *hw, uint32_t val)
  */
 static inline void i2s_ll_rx_set_mclk(i2s_dev_t *hw, const hal_utils_clk_div_t *mclk_div)
 {
-    /* Workaround for inaccurate clock while switching from a relatively low sample rate to a high sample rate
-     * Set to particular coefficients first then update to the target coefficients,
-     * otherwise the clock division might be inaccurate.
-     * the general idea is to set a value that impossible to calculate from the regular decimal */
-    i2s_ll_rx_set_raw_clk_div(hw, 7, 317, 7, 3, 0);
-
     uint32_t div_x = 0;
     uint32_t div_y = 0;
     uint32_t div_z = 0;

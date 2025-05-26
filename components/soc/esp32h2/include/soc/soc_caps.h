@@ -24,7 +24,24 @@
 
 #pragma once
 
+#ifdef __has_include
+#  if __has_include("sdkconfig.h")
+#    include "sdkconfig.h"
+#    define SOC_CAPS_ECO_VER    CONFIG_ESP32H2_REV_MIN_FULL
+#  endif
+#endif
+
+#if !defined(SOC_CAPS_ECO_VER)
+#define SOC_CAPS_ECO_VER    SOC_CAPS_ECO_VER_MAX
+#endif
+
+#ifndef SOC_CAPS_ECO_VER
+#warning ECO version not determined. Some ECO related caps will not be available.
+#warning Define SOC_CAPS_ECO_VER before including this header.
+#endif
+
 /*-------------------------- COMMON CAPS ---------------------------------------*/
+#define SOC_CAPS_ECO_VER_MAX            102
 #define SOC_ADC_SUPPORTED               1
 #define SOC_ANA_CMPR_SUPPORTED          1
 #define SOC_DEDICATED_GPIO_SUPPORTED    1
@@ -88,6 +105,8 @@
 
 #define SOC_AES_SUPPORT_AES_128 (1)
 #define SOC_AES_SUPPORT_AES_256 (1)
+
+#define SOC_AES_SUPPORT_PSEUDO_ROUND_FUNCTION (1) /*!< Only avliable in chip version above 1.2*/
 
 /*-------------------------- ADC CAPS -------------------------------*/
 /*!< SAR ADC Module*/
@@ -441,7 +460,9 @@
 #define SOC_EFUSE_SOFT_DIS_JTAG 1
 #define SOC_EFUSE_DIS_ICACHE 1
 #define SOC_EFUSE_BLOCK9_KEY_PURPOSE_QUIRK 1  // XTS-AES and ECDSA key purposes not supported for this block
+#if SOC_CAPS_ECO_VER < 102
 #define SOC_EFUSE_ECDSA_USE_HARDWARE_K 1 // Force use hardware TRNG supplied K for ECDSA
+#endif
 
 /*-------------------------- Secure Boot CAPS----------------------------*/
 #define SOC_SECURE_BOOT_V2_RSA              1
@@ -454,13 +475,16 @@
 #define SOC_FLASH_ENCRYPTED_XTS_AES_BLOCK_MAX   (32)
 #define SOC_FLASH_ENCRYPTION_XTS_AES        1
 #define SOC_FLASH_ENCRYPTION_XTS_AES_128    1
+#define SOC_FLASH_ENCRYPTION_XTS_AES_SUPPORT_PSEUDO_ROUND  1 /*!< Only avliable in chip version above 1.2*/
 
 /*------------------------ Anti DPA (Security) CAPS --------------------------*/
 #define SOC_CRYPTO_DPA_PROTECTION_SUPPORTED     1
 
+/*--------------------------- ECC CAPS ---------------------------------------*/
+#define SOC_ECC_CONSTANT_TIME_POINT_MUL           1
+
 /*------------------------- ECDSA CAPS -------------------------*/
 #define SOC_ECDSA_USES_MPI                  (1)
-
 /*-------------------------- UART CAPS ---------------------------------------*/
 // ESP32-H2 has 2 UARTs
 #define SOC_UART_NUM                (2)
@@ -474,6 +498,8 @@
 
 // UART has an extra TX_WAIT_SEND state when the FIFO is not empty and XOFF is enabled
 #define SOC_UART_SUPPORT_FSM_TX_WAIT_SEND   (1)
+
+#define SOC_UART_SUPPORT_SLEEP_RETENTION   (1)         /*!< Support back up registers before sleep */
 
 // TODO: IDF-5679 (Copy from esp32c6, need check)
 /*-------------------------- COEXISTENCE HARDWARE PTI CAPS -------------------------------*/
@@ -500,6 +526,9 @@
 #define SOC_PM_SUPPORT_TOP_PD           (1)
 #define SOC_PM_PAU_LINK_NUM             (4)
 #define SOC_PM_CPU_RETENTION_BY_SW      (1)
+
+#define SOC_PM_PAU_REGDMA_UPDATE_CACHE_BEFORE_WAIT_COMPARE  (1)
+
 #define SOC_PM_MODEM_RETENTION_BY_REGDMA           (1)
 #define SOC_PM_SUPPORT_DEEPSLEEP_CHECK_STUB_ONLY   (1) /*!<Supports CRC only the stub code in RTC memory */
 #define SOC_PM_RETENTION_SW_TRIGGER_REGDMA      (1)    /*!< In esp32H2, regdma will power off when entering sleep */

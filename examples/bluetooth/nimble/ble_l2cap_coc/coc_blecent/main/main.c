@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
@@ -77,7 +77,7 @@ blecent_l2cap_coc_send_data(struct ble_l2cap_chan *chan)
 }
 
 /**
- * After connetion is established on GAP layer, service discovery is performed. On
+ * After connection is established on GAP layer, service discovery is performed. On
  * it's completion, this API is called for making a connection is on L2CAP layer.
  */
 static void
@@ -340,12 +340,14 @@ blecent_connect_if_interesting(void *disc)
     }
 #endif
 
+#if !(MYNEWT_VAL(BLE_HOST_ALLOW_CONNECT_WITH_SCAN))
     /* Scanning must be stopped before a connection can be initiated. */
     rc = ble_gap_disc_cancel();
     if (rc != 0) {
         MODLOG_DFLT(DEBUG, "Failed to cancel scan; rc=%d\n", rc);
         return;
     }
+#endif
 
     /* Figure out address to use for connect (no privacy for now) */
     rc = ble_hs_id_infer_auto(0, &own_addr_type);
@@ -403,39 +405,39 @@ blecent_gap_event(struct ble_gap_event *event, void *arg)
             return 0;
         }
 
-        /* An advertisment report was received during GAP discovery. */
+        /* An advertisement report was received during GAP discovery. */
         print_adv_fields(&fields);
 
         /* Try to connect to the advertiser if it looks interesting. */
         blecent_connect_if_interesting(&event->disc);
         return 0;
 
-    case BLE_GAP_EVENT_CONNECT:
+    case BLE_GAP_EVENT_LINK_ESTAB:
         /* A new connection was established or a connection attempt failed. */
-        if (event->connect.status == 0) {
+        if (event->link_estab.status == 0) {
             /* Connection successfully established. */
             MODLOG_DFLT(INFO, "Connection established ");
 
-            rc = ble_gap_conn_find(event->connect.conn_handle, &desc);
+            rc = ble_gap_conn_find(event->link_estab.conn_handle, &desc);
             assert(rc == 0);
             print_conn_desc(&desc);
             MODLOG_DFLT(INFO, "\n");
 
 #if MYNEWT_VAL(BLE_L2CAP_COC_MAX_NUM) >= 1
-            conn_handle_coc = event->connect.conn_handle;
+            conn_handle_coc = event->link_estab.conn_handle;
             disc_cb = blecent_l2cap_coc_on_disc_complete;
 #else
             disc_cb = blecent_on_disc_complete;
 #endif
             /* Remember peer. */
-            rc = peer_add(event->connect.conn_handle);
+            rc = peer_add(event->link_estab.conn_handle);
             if (rc != 0) {
                 MODLOG_DFLT(ERROR, "Failed to add peer; rc=%d\n", rc);
                 return 0;
             }
 
             /* Perform service discovery. */
-            rc = peer_disc_all(event->connect.conn_handle,
+            rc = peer_disc_all(event->link_estab.conn_handle,
                                disc_cb, NULL);
             if (rc != 0) {
                 MODLOG_DFLT(ERROR, "Failed to discover services; rc=%d\n", rc);
@@ -444,7 +446,7 @@ blecent_gap_event(struct ble_gap_event *event, void *arg)
         } else {
             /* Connection attempt failed; resume scanning. */
             MODLOG_DFLT(ERROR, "Error: Connection failed; status=%d\n",
-                        event->connect.status);
+                        event->link_estab.status);
             blecent_scan();
         }
 
@@ -470,7 +472,7 @@ blecent_gap_event(struct ble_gap_event *event, void *arg)
 
 #if CONFIG_EXAMPLE_EXTENDED_ADV
     case BLE_GAP_EVENT_EXT_DISC:
-        /* An advertisment report was received during GAP discovery. */
+        /* An advertisement report was received during GAP discovery. */
         ext_print_adv_report(&event->disc);
 
         blecent_connect_if_interesting(&event->disc);

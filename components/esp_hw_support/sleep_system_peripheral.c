@@ -18,7 +18,6 @@
 #include "esp_private/sleep_retention.h"
 #include "esp_regdma.h"
 
-#include "soc/uart_reg.h"
 #include "soc/systimer_reg.h"
 #include "soc/timer_group_reg.h"
 #include "soc/spi_mem_reg.h"
@@ -32,7 +31,7 @@
 
 static __attribute__((unused)) const char *TAG = "sleep_sys_periph";
 
-#define SLEEP_RETENTION_PERIPHERALS_PRIORITY_DEFAULT    (REGDMA_LINK_PRI_6)
+#define SLEEP_RETENTION_PERIPHERALS_PRIORITY_DEFAULT    (REGDMA_LINK_PRI_SYS_PERIPH_LOW)
 
 static __attribute__((unused)) esp_err_t sleep_sys_periph_intr_matrix_retention_init(void *arg)
 {
@@ -42,7 +41,7 @@ static __attribute__((unused)) esp_err_t sleep_sys_periph_intr_matrix_retention_
         [0] = { .config = REGDMA_LINK_CONTINUOUS_INIT(REGDMA_INTMTX_LINK(0), DR_REG_INTERRUPT_MATRIX_BASE, DR_REG_INTERRUPT_MATRIX_BASE, N_REGS_INTR_MATRIX(), 0, 0), .owner = ENTRY(0) | ENTRY(2) }  /* intr matrix */
     };
 
-    esp_err_t err = sleep_retention_entries_create(intr_matrix_regs_retention, ARRAY_SIZE(intr_matrix_regs_retention), REGDMA_LINK_PRI_5, SLEEP_RETENTION_MODULE_SYS_PERIPH);
+    esp_err_t err = sleep_retention_entries_create(intr_matrix_regs_retention, ARRAY_SIZE(intr_matrix_regs_retention), REGDMA_LINK_PRI_SYS_PERIPH_HIGH, SLEEP_RETENTION_MODULE_SYS_PERIPH);
     ESP_RETURN_ON_ERROR(err, TAG, "failed to allocate memory for digital peripherals (%s) retention", "Interrupt matrix");
     ESP_LOGD(TAG, "Interrupt Matrix sleep retention initialization");
     return ESP_OK;
@@ -56,7 +55,7 @@ static __attribute__((unused)) esp_err_t sleep_sys_periph_hp_system_retention_in
         [0] = { .config = REGDMA_LINK_CONTINUOUS_INIT(REGDMA_HPSYS_LINK(0), DR_REG_HP_SYSTEM_BASE, DR_REG_HP_SYSTEM_BASE, N_REGS_HP_SYSTEM(), 0, 0), .owner = ENTRY(0) | ENTRY(2) }  /* hp system */
     };
 
-    esp_err_t err = sleep_retention_entries_create(hp_system_regs_retention, ARRAY_SIZE(hp_system_regs_retention), REGDMA_LINK_PRI_5, SLEEP_RETENTION_MODULE_SYS_PERIPH);
+    esp_err_t err = sleep_retention_entries_create(hp_system_regs_retention, ARRAY_SIZE(hp_system_regs_retention), REGDMA_LINK_PRI_SYS_PERIPH_HIGH, SLEEP_RETENTION_MODULE_SYS_PERIPH);
     ESP_RETURN_ON_ERROR(err, TAG, "failed to allocate memory for digital peripherals (%s) retention", "HP system");
     ESP_LOGD(TAG, "HP System sleep retention initialization");
     return ESP_OK;
@@ -72,34 +71,33 @@ static __attribute__((unused)) esp_err_t sleep_sys_periph_tee_apm_retention_init
         [1] = { .config = REGDMA_LINK_CONTINUOUS_INIT(REGDMA_TEEAPM_LINK(1), DR_REG_TEE_BASE,    DR_REG_TEE_BASE,    N_REGS_TEE(), 0, 0), .owner = ENTRY(0) | ENTRY(2) }  /* tee */
     };
 
-    esp_err_t err = sleep_retention_entries_create(tee_apm_regs_retention, ARRAY_SIZE(tee_apm_regs_retention), REGDMA_LINK_PRI_4, SLEEP_RETENTION_MODULE_SYS_PERIPH);
+    esp_err_t err = sleep_retention_entries_create(tee_apm_regs_retention, ARRAY_SIZE(tee_apm_regs_retention), REGDMA_LINK_PRI_NON_CRITICAL_TEE_APM, SLEEP_RETENTION_MODULE_SYS_PERIPH);
     if (err == ESP_OK) {
         const static sleep_retention_entries_config_t regs_highpri_retention[] = {
             [0] = { .config = REGDMA_LINK_WRITE_INIT(REGDMA_TEEAPM_LINK(2), TEE_M4_MODE_CTRL_REG, 0x0, 0xffffffff, 1, 0), .owner = ENTRY(2) }
         };
-        err = sleep_retention_entries_create(regs_highpri_retention, ARRAY_SIZE(regs_highpri_retention), REGDMA_LINK_PRI_2, SLEEP_RETENTION_MODULE_SYS_PERIPH);
+        err = sleep_retention_entries_create(regs_highpri_retention, ARRAY_SIZE(regs_highpri_retention), REGDMA_LINK_PRI_CRITICAL_TEE_APM, SLEEP_RETENTION_MODULE_SYS_PERIPH);
     }
     ESP_RETURN_ON_ERROR(err, TAG, "failed to allocate memory for digital peripherals (%s) retention", "TEE/APM");
     ESP_LOGD(TAG, "TEE/APM sleep retention initialization");
     return ESP_OK;
 }
 
-static __attribute__((unused)) esp_err_t sleep_sys_periph_uart0_retention_init(void *arg)
+#if CONFIG_ESP_CONSOLE_UART
+#include "sleep_uart_retention_context.inc"
+
+const uart_reg_retention_info_t uart_regs_retention[SOC_UART_HP_NUM] = UART_REGS_RETENTION_INFO;
+
+static __attribute__((unused)) esp_err_t sleep_sys_periph_stdout_console_uart_retention_init(void *arg)
 {
-    #define N_REGS_UART()   (((UART_ID_REG(0) - UART_INT_RAW_REG(0)) / 4) + 1)
-
-    const static sleep_retention_entries_config_t uart_regs_retention[] = {
-        [0] = { .config = REGDMA_LINK_CONTINUOUS_INIT(REGDMA_UART_LINK(0x00), UART_INT_RAW_REG(0),    UART_INT_RAW_REG(0), N_REGS_UART(),  0, 0), .owner = ENTRY(0) | ENTRY(2) }, /* uart */
-        /* Note: uart register should set update reg to make the configuration take effect */
-        [1] = { .config = REGDMA_LINK_WRITE_INIT     (REGDMA_UART_LINK(0x01), UART_REG_UPDATE_REG(0), UART_REG_UPDATE,  UART_REG_UPDATE_M, 1, 0), .owner = ENTRY(0) | ENTRY(2) },
-        [2] = { .config = REGDMA_LINK_WAIT_INIT      (REGDMA_UART_LINK(0x02), UART_REG_UPDATE_REG(0), 0x0,              UART_REG_UPDATE_M, 1, 0), .owner = ENTRY(0) | ENTRY(2) }
-    };
-
-    esp_err_t err = sleep_retention_entries_create(uart_regs_retention, ARRAY_SIZE(uart_regs_retention), REGDMA_LINK_PRI_5, SLEEP_RETENTION_MODULE_SYS_PERIPH);
+    esp_err_t err = sleep_retention_entries_create(uart_regs_retention[CONFIG_ESP_CONSOLE_UART_NUM].regdma_entry_array,
+                                                   uart_regs_retention[CONFIG_ESP_CONSOLE_UART_NUM].array_size,
+                                                   REGDMA_LINK_PRI_SYS_PERIPH_HIGH, SLEEP_RETENTION_MODULE_SYS_PERIPH);
     ESP_RETURN_ON_ERROR(err, TAG, "failed to allocate memory for digital peripherals (%s) retention", "UART");
-    ESP_LOGD(TAG, "UART sleep retention initialization");
+    ESP_LOGD(TAG, "stdout console UART sleep retention initialization");
     return ESP_OK;
 }
+#endif
 
 static __attribute__((unused)) esp_err_t sleep_sys_periph_tg0_retention_init(void *arg)
 {
@@ -126,12 +124,12 @@ static __attribute__((unused)) esp_err_t sleep_sys_periph_tg0_retention_init(voi
 static __attribute__((unused)) esp_err_t sleep_sys_periph_iomux_retention_init(void *arg)
 {
 #if CONFIG_IDF_TARGET_ESP32C6
-    #define N_REGS_IOMUX_0()    (((PERIPHS_IO_MUX_SPID_U - REG_IO_MUX_BASE) / 4) + 1)
+    #define N_REGS_IOMUX_0()    (((IO_MUX_GPIO30_REG - REG_IO_MUX_BASE) / 4) + 1)
     #define N_REGS_IOMUX_1()    (((GPIO_FUNC34_OUT_SEL_CFG_REG - GPIO_FUNC0_OUT_SEL_CFG_REG) / 4) + 1)
     #define N_REGS_IOMUX_2()    (((GPIO_FUNC124_IN_SEL_CFG_REG - GPIO_STATUS_NEXT_REG) / 4) + 1)
     #define N_REGS_IOMUX_3()    (((GPIO_PIN34_REG - DR_REG_GPIO_BASE) / 4) + 1)
 #elif CONFIG_IDF_TARGET_ESP32H2
-    #define N_REGS_IOMUX_0()    (((PERIPHS_IO_MUX_SPID_U - REG_IO_MUX_BASE) / 4) + 1)
+    #define N_REGS_IOMUX_0()    (((IO_MUX_GPIO27_REG - REG_IO_MUX_BASE) / 4) + 1)
     #define N_REGS_IOMUX_1()    (((GPIO_FUNC31_OUT_SEL_CFG_REG - GPIO_FUNC0_OUT_SEL_CFG_REG) / 4) + 1)
     #define N_REGS_IOMUX_2()    (((GPIO_FUNC124_IN_SEL_CFG_REG - GPIO_STATUS_NEXT_REG) / 4) + 1)
     #define N_REGS_IOMUX_3()    (((GPIO_PIN31_REG - DR_REG_GPIO_BASE) / 4) + 1)
@@ -229,8 +227,10 @@ static __attribute__((unused)) esp_err_t sleep_sys_periph_retention_init(void *a
     if(err) goto error;
     err = sleep_sys_periph_tee_apm_retention_init(arg);
     if(err) goto error;
-    err = sleep_sys_periph_uart0_retention_init(arg);
+#if CONFIG_ESP_CONSOLE_UART
+    err = sleep_sys_periph_stdout_console_uart_retention_init(arg);
     if(err) goto error;
+#endif
     err = sleep_sys_periph_tg0_retention_init(arg);
     if(err) goto error;
     err = sleep_sys_periph_iomux_retention_init(arg);
@@ -248,9 +248,7 @@ bool peripheral_domain_pd_allowed(void)
 #if CONFIG_PM_POWER_DOWN_PERIPHERAL_IN_LIGHT_SLEEP
     const uint32_t inited_modules = sleep_retention_get_inited_modules();
     const uint32_t created_modules = sleep_retention_get_created_modules();
-    const uint32_t mask = (const uint32_t) (BIT(SLEEP_RETENTION_MODULE_SYS_PERIPH));
-
-    return ((inited_modules & mask) == (created_modules & mask));
+    return (((inited_modules ^ created_modules) & TOP_DOMAIN_PERIPHERALS_BM) == 0);
 #else
     return false;
 #endif

@@ -57,6 +57,7 @@ typedef enum {
 } wifi_appie_ram_t;
 
 enum {
+    /* this enum is in C2 ROM, do not change before WPA3_AUTH_PSK_EXT_KEY */
     NONE_AUTH           = 0x01,
     WPA_AUTH_UNSPEC     = 0x02,
     WPA_AUTH_PSK        = 0x03,
@@ -73,6 +74,7 @@ enum {
     WPA2_AUTH_FT_PSK    = 0x0e,
     WPA3_AUTH_OWE       = 0x0f,
     WPA3_AUTH_PSK_EXT_KEY = 0x10,
+    /* this enum is in C2 ROM, do not change before WPA3_AUTH_PSK_EXT_KEY */
     WPA2_AUTH_INVALID
 };
 
@@ -141,7 +143,7 @@ struct wpa_funcs {
     void (*wpa_config_done)(void);
     uint8_t *(*owe_build_dhie)(uint16_t group);
     int (*owe_process_assoc_resp)(const u8 *rsn_ie, size_t rsn_len, const uint8_t *dh_ie, size_t dh_len);
-    int (*wpa_sta_set_ap_rsnxe)(const u8 *rsnxe, size_t rsnxe_ie_len);
+    void (*wpa_sta_clear_curr_pmksa)(void);
 };
 
 struct wpa2_funcs {

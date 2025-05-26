@@ -17,10 +17,23 @@
 #include "freertos/task.h"
 #include "freertos/ringbuf.h"
 #include "driver/i2c_slave.h"
+#include "esp_private/periph_ctrl.h"
 #include "esp_pm.h"
 
 #ifdef __cplusplus
 extern "C" {
+#endif
+
+#if SOC_PERIPH_CLK_CTRL_SHARED
+#define I2C_CLOCK_SRC_ATOMIC() PERIPH_RCC_ATOMIC()
+#else
+#define I2C_CLOCK_SRC_ATOMIC()
+#endif
+
+#if !SOC_RCC_IS_INDEPENDENT
+#define I2C_RCC_ATOMIC() PERIPH_RCC_ATOMIC()
+#else
+#define I2C_RCC_ATOMIC()
 #endif
 
 #if CONFIG_I2C_ISR_IRAM_SAFE
@@ -126,7 +139,8 @@ struct i2c_master_bus_t {
     bool trans_over_buffer;                                          // Data length is more than hardware fifo length, needs interrupt.
     bool async_trans;                                                // asynchronous transaction, true after callback is installed.
     bool ack_check_disable;                                          // Disable ACK check
-    volatile bool trans_done;                                                 // transaction command finish
+    volatile bool trans_done;                                        // transaction command finish
+    bool bypass_nack_log;                                             // Bypass the error log. Sometimes the error is expected.
     SLIST_HEAD(i2c_master_device_list_head, i2c_master_device_list) device_list;      // I2C device (instance) list
     // asnyc trans members
     bool async_break;                                                // break transaction loop flag.
@@ -231,6 +245,14 @@ esp_err_t i2c_select_periph_clock(i2c_bus_handle_t handle, i2c_clock_source_t cl
  *      - Otherwise: Set SCL/SDA IOs error.
  */
 esp_err_t i2c_common_set_pins(i2c_bus_handle_t handle);
+
+/**
+ * @brief Check whether bus is acquired
+ *
+ * @param port_num number of port
+ * @return true if the bus is occupied, false if the bus is not occupied.
+*/
+bool i2c_bus_occupied(i2c_port_num_t port_num);
 
 #ifdef __cplusplus
 }

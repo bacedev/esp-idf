@@ -5,7 +5,6 @@ tools/ci/check_*.txt
 tools/ci/check_*.sh
 tools/ci/check_copyright_config.yaml
 tools/ci/get_all_test_results.py
-tools/ci/idf_unity_tester.py
 tools/gdb_panic_server.py
 tools/check_term.py
 tools/python_version_checker.py
@@ -41,3 +40,5 @@ tools/ci/cleanup_ignore_lists.py
 tools/ci/artifacts_handler.py
 tools/ci/get_known_failure_cases_file.py
 tools/unit-test-app/**/*
+tools/bt/bt_hci_to_btsnoop.py
+tools/bt/README.md

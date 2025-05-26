@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2022-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2022-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -22,10 +22,13 @@
 #include "lib/spinel/spinel.h"
 #include "openthread/platform/diag.h"
 #include "openthread/platform/radio.h"
+#include "openthread/platform/time.h"
 #include "platform/exit_code.h"
+#include "spinel_driver.hpp"
 
 using ot::Spinel::RadioSpinel;
 using esp::openthread::SpinelInterfaceAdapter;
+using ot::Spinel::SpinelDriver;
 
 #if CONFIG_OPENTHREAD_RADIO_SPINEL_UART // CONFIG_OPENTHREAD_RADIO_SPINEL_UART
 using esp::openthread::UartSpinelInterface;
@@ -35,11 +38,52 @@ using esp::openthread::SpiSpinelInterface;
 static SpinelInterfaceAdapter<SpiSpinelInterface> s_spinel_interface;
 #endif
 
+static SpinelDriver s_spinel_driver;
 static RadioSpinel s_radio;
+static otRadioCaps s_radio_caps = (OT_RADIO_CAPS_ENERGY_SCAN       |
+#if CONFIG_OPENTHREAD_RX_ON_WHEN_IDLE
+                                   OT_RADIO_CAPS_RX_ON_WHEN_IDLE   |
+#endif
+                                   OT_RADIO_CAPS_TRANSMIT_SEC      |
+                                   OT_RADIO_CAPS_RECEIVE_TIMING    |
+                                   OT_RADIO_CAPS_TRANSMIT_TIMING   |
+                                   OT_RADIO_CAPS_ACK_TIMEOUT       |
+                                   OT_RADIO_CAPS_SLEEP_TO_TX);
 
 static const char *radiospinel_workflow = "radio_spinel";
 
 static const esp_openthread_radio_config_t *s_esp_openthread_radio_config = NULL;
+
+static esp_openthread_compatibility_error_callback s_compatibility_error_callback = NULL;
+
+#if CONFIG_EXTERNAL_COEX_ENABLE
+
+#define SPINEL_PROP_VENDOR_ESP_COEX_EVENT (SPINEL_PROP_VENDOR_ESP__BEGIN + 3)
+
+static esp_ieee802154_coex_config_t s_coex_config = {
+    .idle = IEEE802154_IDLE,
+    .txrx = IEEE802154_LOW,
+    .txrx_at = IEEE802154_MIDDLE,
+};
+
+static void esp_openthread_restore_coex_config(void *context)
+{
+    esp_openthread_set_coex_config(s_coex_config);
+}
+
+static esp_err_t esp_openthread_radio_spinel_coex_config_init(void)
+{
+    s_radio.SetVendorRestorePropertiesCallback(esp_openthread_restore_coex_config, esp_openthread_get_instance());
+    esp_ieee802154_coex_config_t coex_config;
+    uint16_t coex_config_len = 0;
+    ESP_RETURN_ON_ERROR(s_radio.Get(SPINEL_PROP_VENDOR_ESP_COEX_EVENT, SPINEL_DATATYPE_DATA_WLEN_S, &coex_config, &coex_config_len),
+                        OT_PLAT_LOG_TAG, "Fail to get coex config");
+    ESP_RETURN_ON_FALSE(coex_config_len == sizeof(esp_ieee802154_coex_config_t), ESP_FAIL, OT_PLAT_LOG_TAG,
+                        "Fail to get coex config");
+    s_coex_config = coex_config;
+    return ESP_OK;
+}
+#endif
 
 static void esp_openthread_radio_config_set(const esp_openthread_radio_config_t *config)
 {
@@ -51,6 +95,22 @@ static const esp_openthread_radio_config_t *esp_openthread_radio_config_get(void
     return s_esp_openthread_radio_config;
 }
 
+static void ot_spinel_compatibility_error_callback(void *context)
+{
+    OT_UNUSED_VARIABLE(context);
+    if (s_compatibility_error_callback) {
+        s_compatibility_error_callback();
+    } else {
+        ESP_LOGE(OT_PLAT_LOG_TAG, "None callback to handle compatibility error of openthread spinel");
+        assert(false);
+    }
+}
+
+void esp_openthread_set_compatibility_error_callback(esp_openthread_compatibility_error_callback callback)
+{
+    s_compatibility_error_callback = callback;
+}
+
 esp_err_t esp_openthread_radio_init(const esp_openthread_platform_config_t *config)
 {
     spinel_iid_t iidList[ot::Spinel::kSpinelHeaderMaxNumIid];
@@ -60,7 +120,7 @@ esp_err_t esp_openthread_radio_init(const esp_openthread_platform_config_t *conf
 #if CONFIG_OPENTHREAD_DIAG
     callbacks.mDiagReceiveDone  = otPlatDiagRadioReceiveDone;
     callbacks.mDiagTransmitDone = otPlatDiagRadioTransmitDone;
-#endif // OPENTHREAD_CONFIG_DIAG_ENABLE
+#endif // CONFIG_OPENTHREAD_DIAG
     callbacks.mEnergyScanDone = otPlatRadioEnergyScanDone;
     callbacks.mReceiveDone    = otPlatRadioReceiveDone;
     callbacks.mTransmitDone   = otPlatRadioTxDone;
@@ -70,14 +130,19 @@ esp_err_t esp_openthread_radio_init(const esp_openthread_platform_config_t *conf
     esp_openthread_radio_config_set(&config->radio_config);
 #if CONFIG_OPENTHREAD_RADIO_SPINEL_UART // CONFIG_OPENTHREAD_RADIO_SPINEL_UART
     ESP_RETURN_ON_ERROR(s_spinel_interface.GetSpinelInterface().Enable(config->radio_config.radio_uart_config), OT_PLAT_LOG_TAG,
-                        "Spinel interface init falied");
+                        "Spinel interface init failed");
 #else // CONFIG_OPENTHREAD_RADIO_SPINEL_SPI
     ESP_RETURN_ON_ERROR(s_spinel_interface.GetSpinelInterface().Enable(config->radio_config.radio_spi_config), OT_PLAT_LOG_TAG,
                         "Spinel interface init failed");
 #endif
-    s_radio.Init(s_spinel_interface.GetSpinelInterface(), /*reset_radio=*/true, /*skip_rcp_compatibility_check=*/false, iidList, ot::Spinel::kSpinelHeaderMaxNumIid);
+    s_spinel_driver.Init(s_spinel_interface.GetSpinelInterface(), true, iidList, ot::Spinel::kSpinelHeaderMaxNumIid);
+    s_radio.SetCompatibilityErrorCallback(ot_spinel_compatibility_error_callback, esp_openthread_get_instance());
+    s_radio.Init(/*skip_rcp_compatibility_check=*/false, /*reset_radio=*/true, &s_spinel_driver, s_radio_caps, /*RCP_time_sync=*/true);
+#if CONFIG_EXTERNAL_COEX_ENABLE
+    ESP_RETURN_ON_ERROR(esp_openthread_radio_spinel_coex_config_init(), OT_PLAT_LOG_TAG, "Coex config init failed");
+#endif
 #if CONFIG_OPENTHREAD_RADIO_SPINEL_SPI // CONFIG_OPENTHREAD_RADIO_SPINEL_SPI
-    ESP_RETURN_ON_ERROR(s_spinel_interface.GetSpinelInterface().AfterRadioInit(), OT_PLAT_LOG_TAG, "Spinel interface init falied");
+    ESP_RETURN_ON_ERROR(s_spinel_interface.GetSpinelInterface().AfterRadioInit(), OT_PLAT_LOG_TAG, "Spinel interface init failed");
 #endif
     return esp_openthread_platform_workflow_register(&esp_openthread_radio_update, &esp_openthread_radio_process,
                                                      radiospinel_workflow);
@@ -106,7 +171,7 @@ esp_err_t esp_openthread_rcp_init(void)
     const esp_openthread_radio_config_t *radio_config = esp_openthread_radio_config_get();
 #if CONFIG_OPENTHREAD_RADIO_SPINEL_UART
     ESP_RETURN_ON_ERROR(s_spinel_interface.GetSpinelInterface().Enable(radio_config->radio_uart_config), OT_PLAT_LOG_TAG,
-                        "Spinel interface init falied");
+                        "Spinel interface init failed");
 #else   // CONFIG_OPENTHREAD_RADIO_SPINEL_SPI
     ESP_RETURN_ON_ERROR(s_spinel_interface.GetSpinelInterface().Enable(radio_config->radio_spi_config), OT_PLAT_LOG_TAG,
                         "Spinel interface init failed");
@@ -123,11 +188,14 @@ esp_err_t esp_openthread_rcp_init(void)
 void esp_openthread_radio_deinit(void)
 {
     s_radio.Deinit();
+    s_spinel_driver.Deinit();
+    s_spinel_interface.GetSpinelInterface().Disable();
     esp_openthread_platform_workflow_unregister(radiospinel_workflow);
 }
 
 esp_err_t esp_openthread_radio_process(otInstance *instance, const esp_openthread_mainloop_context_t *mainloop)
 {
+    s_spinel_driver.Process((void *)mainloop);
     s_radio.Process((void *)mainloop);
 
     return ESP_OK;
@@ -211,7 +279,8 @@ int8_t otPlatRadioGetRssi(otInstance *instance)
 
 otRadioCaps otPlatRadioGetCaps(otInstance *instance)
 {
-    return s_radio.GetRadioCaps();
+    s_radio_caps = s_radio.GetRadioCaps();
+    return s_radio_caps;
 }
 
 bool otPlatRadioGetPromiscuous(otInstance *instance)
@@ -319,24 +388,31 @@ void otPlatRadioSetMacFrameCounter(otInstance *aInstance, uint32_t aMacFrameCoun
     SuccessOrDie(s_radio.SetMacFrameCounter(aMacFrameCounter, true));
 }
 
-#if OPENTHREAD_CONFIG_DIAG_ENABLE
-otError otPlatDiagProcess(otInstance *instance, int argc, char *argv[], char *output, size_t output_max_len)
+#if CONFIG_OPENTHREAD_DIAG
+otError otPlatDiagProcess(otInstance *aInstance, uint8_t aArgsLength, char *aArgs[])
 {
     // deliver the platform specific diags commands to radio only ncp.
     char cmd[OPENTHREAD_CONFIG_DIAG_CMD_LINE_BUFFER_SIZE] = {'\0'};
     char *cur = cmd;
     char *end = cmd + sizeof(cmd);
 
-    for (int index = 0; index < argc; index++) {
-        cur += snprintf(cur, static_cast<size_t>(end - cur), "%s ", argv[index]);
+    for (int index = 0; index < aArgsLength; index++) {
+        cur += snprintf(cur, static_cast<size_t>(end - cur), "%s ", aArgs[index]);
     }
 
-    return s_radio.PlatDiagProcess(cmd, output, output_max_len);
+    return s_radio.PlatDiagProcess(cmd);
+}
+
+void otPlatDiagSetOutputCallback(otInstance *aInstance, otPlatDiagOutputCallback aCallback, void *aContext)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aCallback);
+    OT_UNUSED_VARIABLE(aContext);
 }
 
 void otPlatDiagModeSet(bool aMode)
 {
-    SuccessOrExit(s_radio.PlatDiagProcess(aMode ? "start" : "stop", NULL, 0));
+    SuccessOrExit(s_radio.PlatDiagProcess(aMode ? "start" : "stop"));
     s_radio.SetDiagEnabled(aMode);
 
 exit:
@@ -353,7 +429,7 @@ void otPlatDiagTxPowerSet(int8_t tx_power)
     char cmd[OPENTHREAD_CONFIG_DIAG_CMD_LINE_BUFFER_SIZE];
 
     snprintf(cmd, sizeof(cmd), "power %d", tx_power);
-    SuccessOrExit(s_radio.PlatDiagProcess(cmd, NULL, 0));
+    SuccessOrExit(s_radio.PlatDiagProcess(cmd));
 
 exit:
     return;
@@ -364,7 +440,7 @@ void otPlatDiagChannelSet(uint8_t channel)
     char cmd[OPENTHREAD_CONFIG_DIAG_CMD_LINE_BUFFER_SIZE];
 
     snprintf(cmd, sizeof(cmd), "channel %d", channel);
-    SuccessOrExit(s_radio.PlatDiagProcess(cmd, NULL, 0));
+    SuccessOrExit(s_radio.PlatDiagProcess(cmd));
 
 exit:
     return;
@@ -378,12 +454,12 @@ void otPlatDiagAlarmCallback(otInstance *instance)
 {
 }
 
+#endif // CONFIG_OPENTHREAD_DIAG
+
 const char *otPlatRadioGetVersionString(otInstance *aInstance)
 {
     return s_radio.GetVersion();
 }
-
-#endif // OPENTHREAD_CONFIG_DIAG_ENABLE
 
 uint64_t otPlatRadioGetNow(otInstance *aInstance)
 {
@@ -419,4 +495,59 @@ void otPlatRadioSetRxOnWhenIdle(otInstance *aInstance, bool aEnable)
 {
     s_radio.SetRxOnWhenIdle(aEnable);
 }
+#endif
+
+uint16_t otPlatTimeGetXtalAccuracy(void)
+{
+    return CONFIG_OPENTHREAD_XTAL_ACCURACY;
+}
+
+uint32_t otPlatRadioGetPreferredChannelMask(otInstance *aInstance)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    // Refer to `GetRadioChannelMask(bool aPreferred)`: TRUE to get preferred channel mask
+    return s_radio.GetRadioChannelMask(true);
+}
+
+uint32_t otPlatRadioGetSupportedChannelMask(otInstance *aInstance)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    // Refer to `GetRadioChannelMask(bool aPreferred)`: FALSE to get supported channel mask
+    return s_radio.GetRadioChannelMask(false);
+}
+
+#if CONFIG_EXTERNAL_COEX_ENABLE
+
+void esp_openthread_set_coex_config(esp_ieee802154_coex_config_t config)
+{
+    otError err = s_radio.Set(SPINEL_PROP_VENDOR_ESP_COEX_EVENT, SPINEL_DATATYPE_DATA_WLEN_S, &s_coex_config, sizeof(esp_ieee802154_coex_config_t));
+    ESP_RETURN_ON_FALSE(err == OT_ERROR_NONE, , OT_PLAT_LOG_TAG, "Fail to set coex config");
+    s_coex_config = config;
+}
+
+esp_ieee802154_coex_config_t esp_openthread_get_coex_config(void)
+{
+    return s_coex_config;
+}
+
+namespace ot {
+namespace Spinel {
+
+otError RadioSpinel::VendorHandleValueIs(spinel_prop_key_t aPropKey)
+{
+    otError error = OT_ERROR_NONE;
+
+    switch (aPropKey)
+    {
+    default:
+        ESP_LOGW(OT_PLAT_LOG_TAG, "Not Implemented!");
+        error = OT_ERROR_NOT_FOUND;
+        break;
+    }
+    return error;
+}
+
+} // namespace Spinel
+} // namespace ot
+
 #endif

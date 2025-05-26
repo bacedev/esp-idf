@@ -77,7 +77,7 @@ menu "Hardware Settings"
 
         config ESP_SLEEP_FLASH_LEAKAGE_WORKAROUND
             bool "Pull-up Flash CS pin in light sleep"
-            depends on !APP_BUILD_TYPE_PURE_RAM_APP && !ESP_SLEEP_POWER_DOWN_FLASH
+            depends on !APP_BUILD_TYPE_PURE_RAM_APP
             default y
             help
                 All IOs will be set to isolate(floating) state by default during sleep.
@@ -109,8 +109,7 @@ menu "Hardware Settings"
 
         config ESP_SLEEP_MSPI_NEED_ALL_IO_PU
             bool "Pull-up all SPI pins in light sleep"
-            depends on !ESP_SLEEP_POWER_DOWN_FLASH \
-                && (ESP_SLEEP_PSRAM_LEAKAGE_WORKAROUND || ESP_SLEEP_FLASH_LEAKAGE_WORKAROUND)
+            depends on (ESP_SLEEP_PSRAM_LEAKAGE_WORKAROUND || ESP_SLEEP_FLASH_LEAKAGE_WORKAROUND)
             default y if IDF_TARGET_ESP32C2 || IDF_TARGET_ESP32S3
             help
                 To reduce leakage current, some types of SPI Flash/RAM only need to pull up the CS pin
@@ -206,18 +205,6 @@ menu "Hardware Settings"
 
                 NOTE: Enabling these callbacks may change sleep duration calculations based on time spent in
                 callback and hence it is highly recommended to keep them as short as possible.
-    endmenu
-
-    menu "ESP_SLEEP_WORKAROUND"
-        # No visible menu/configs for workaround
-        visible if 0
-        config ESP_SLEEP_SYSTIMER_STALL_WORKAROUND
-            bool "ESP32C3 SYSTIMER Stall Issue Workaround"
-            depends on IDF_TARGET_ESP32C3
-            help
-                Its not able to stall ESP32C3 systimer in sleep.
-                To fix related RTOS TICK issue, select it to disable related systimer during sleep.
-                TODO: IDF-7036
     endmenu
 
     menu "RTC Clock Config"
@@ -348,6 +335,20 @@ menu "Hardware Settings"
             default 3 if ESP_CRYPTO_DPA_PROTECTION_LEVEL_HIGH
 
     endmenu
+
+    config ESP_CRYPTO_FORCE_ECC_CONSTANT_TIME_POINT_MUL
+        bool "Forcefully enable ECC constant time point multiplication operations"
+        depends on SOC_ECC_CONSTANT_TIME_POINT_MUL
+        default N
+        help
+            If enabled, the app startup code will burn the ECC_FORCE_CONST_TIME efuse bit to force the
+            ECC peripheral to always perform constant time point multiplication operations,
+            irrespective of the ECC_MULT_SECURITY_MODE status bit that is present in the ECC_MULT_CONF_REG
+            register. By default, ESP-IDF configures the ECC peripheral to perform constant time point
+            multiplication operations, so enabling this config would provide security enhancement only in
+            the cases when trusted boot is not enabled and the attacker tries carrying out non-constant
+            time point multiplication operations by changing the default ESP-IDF configurations.
+            Performing constant time operations protect the ECC multiplication operations from timing attacks.
 
     # Invisible bringup bypass options for esp_hw_support component
     config ESP_BRINGUP_BYPASS_CPU_CLK_SETTING

@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 #
-# SPDX-FileCopyrightText: 2019-2023 Espressif Systems (Shanghai) CO LTD
+# SPDX-FileCopyrightText: 2019-2024 Espressif Systems (Shanghai) CO LTD
 # SPDX-License-Identifier: Apache-2.0
-
 import json
 import os
 import subprocess
 import sys
-from unittest import TestCase, main, mock
+from typing import List
+from unittest import main
+from unittest import mock
+from unittest import TestCase
 
-import elftools.common.utils as ecu
 import jsonschema
-from elftools.elf.elffile import ELFFile
 
 try:
     from StringIO import StringIO
@@ -249,48 +249,6 @@ class TestHelpOutput(TestWithoutExtensions):
         action_test(['idf.py', 'help', '--json', '--add-options'], schema_json)
 
 
-class TestROMs(TestWithoutExtensions):
-    def get_string_from_elf_by_addr(self, filename: str, address: int) -> str:
-        result = ''
-        with open(filename, 'rb') as stream:
-            elf_file = ELFFile(stream)
-            ro = elf_file.get_section_by_name('.rodata')
-            ro_addr_delta = ro['sh_addr'] - ro['sh_offset']
-            cstring = ecu.parse_cstring_from_stream(ro.stream, address - ro_addr_delta)
-            if cstring:
-                result = str(cstring.decode('utf-8'))
-        return result
-
-    def test_roms_validate_json(self):
-        with open(os.path.join(py_actions_path, 'roms.json'), 'r') as f:
-            roms_json = json.load(f)
-
-        with open(os.path.join(py_actions_path, 'roms_schema.json'), 'r') as f:
-            schema_json = json.load(f)
-        jsonschema.validate(roms_json, schema_json)
-
-    def test_roms_check_supported_chips(self):
-        from idf_py_actions.constants import SUPPORTED_TARGETS
-        with open(os.path.join(py_actions_path, 'roms.json'), 'r') as f:
-            roms_json = json.load(f)
-        for chip in SUPPORTED_TARGETS:
-            self.assertTrue(chip in roms_json, msg=f'Have no ROM data for chip {chip}')
-
-    def test_roms_validate_build_date(self):
-        sys.path.append(py_actions_path)
-
-        rom_elfs_dir = os.getenv('ESP_ROM_ELF_DIR')
-        with open(os.path.join(py_actions_path, 'roms.json'), 'r') as f:
-            roms_json = json.load(f)
-
-        for chip in roms_json:
-            for k in roms_json[chip]:
-                rom_file = os.path.join(rom_elfs_dir, f'{chip}_rev{k["rev"]}_rom.elf')
-                build_date_str = self.get_string_from_elf_by_addr(rom_file, int(k['build_date_str_addr'], base=16))
-                self.assertTrue(len(build_date_str) == 11)
-                self.assertTrue(build_date_str == k['build_date_str'])
-
-
 class TestFileArgumentExpansion(TestCase):
     def test_file_expansion(self):
         """Test @filename expansion functionality"""
@@ -342,6 +300,63 @@ class TestFileArgumentExpansion(TestCase):
                 env=os.environ,
                 stderr=subprocess.STDOUT).decode('utf-8', 'ignore')
         self.assertIn('(expansion of @args_non_existent) could not be opened', cm.exception.output.decode('utf-8', 'ignore'))
+
+
+class TestWrapperCommands(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.sample_project_dir = os.path.join(current_dir, '..', 'test_build_system', 'build_test_app')
+        os.chdir(cls.sample_project_dir)
+        super().setUpClass()
+
+    def call_command(self, command: List[str]) -> str:
+        try:
+            output = subprocess.check_output(
+                command,
+                env=os.environ,
+                stderr=subprocess.STDOUT).decode('utf-8', 'ignore')
+            return output
+        except subprocess.CalledProcessError as e:
+            self.fail(f'Process should have exited normally, but it exited with a return code of {e.returncode}')
+
+    @classmethod
+    def tearDownClass(cls):
+        subprocess.run([sys.executable, idf_py_path, 'fullclean'], stdout=subprocess.DEVNULL)
+        os.chdir(current_dir)
+        super().tearDownClass()
+
+
+class TestUF2Commands(TestWrapperCommands):
+    """
+    Test if uf2 commands are invoked as expected.
+    This test is not testing the functionality of mkuf2.py/idf.py uf2, but the invocation of the command from idf.py.
+    """
+
+    def test_uf2(self):
+        uf2_command = [sys.executable, idf_py_path, 'uf2']
+        output = self.call_command(uf2_command)
+        self.assertIn('Executing:', output)
+
+    def test_uf2_with_envvars(self):
+        # Values do not really matter, they should not be used.
+        os.environ['ESPBAUD'] = '115200'
+        os.environ['ESPPORT'] = '/dev/ttyUSB0'
+        self.test_uf2()
+        os.environ.pop('ESPBAUD')
+        os.environ.pop('ESPPORT')
+
+    def test_uf2_app(self):
+        uf2_app_command = [sys.executable, idf_py_path, 'uf2-app']
+        output = self.call_command(uf2_app_command)
+        self.assertIn('Executing:', output)
+
+    def test_uf2_app_with_envvars(self):
+        # Values do not really matter, they should not be used.
+        os.environ['ESPBAUD'] = '115200'
+        os.environ['ESPPORT'] = '/dev/ttyUSB0'
+        self.test_uf2_app()
+        os.environ.pop('ESPBAUD')
+        os.environ.pop('ESPPORT')
 
 
 if __name__ == '__main__':

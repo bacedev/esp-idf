@@ -143,6 +143,7 @@ static void btu_ble_periodic_adv_sync_lost_evt(UINT8 *p);
 static void btu_ble_scan_timeout_evt(UINT8 *p);
 static void btu_ble_adv_set_terminate_evt(UINT8 *p);
 static void btu_ble_scan_req_received_evt(UINT8 *p);
+static void btu_ble_channel_select_alg_evt(UINT8 *p);
 #endif // #if (BLE_50_FEATURE_SUPPORT == TRUE)
 #if (BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER == TRUE)
 static void btu_ble_periodic_adv_sync_trans_recv(UINT8 *p);
@@ -411,6 +412,7 @@ void btu_hcif_process_event (UNUSED_ATTR UINT8 controller_id, BT_HDR *p_msg)
             btu_ble_scan_req_received_evt(p);
             break;
         case HCI_BLE_CHANNEL_SELECT_ALG:
+            btu_ble_channel_select_alg_evt(p);
             break;
 #endif // #if (BLE_50_FEATURE_SUPPORT == TRUE)
 #if (BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER == TRUE)
@@ -1088,7 +1090,12 @@ static void btu_hcif_hdl_command_complete (UINT16 opcode, UINT8 *p, UINT16 evt_l
         btm_ble_set_addr_resolution_enable_complete(p, evt_len);
         break;
     case HCI_BLE_SET_RAND_PRIV_ADDR_TIMOUT:
+        btm_ble_set_rpa_timeout_complete(p, evt_len);
         break;
+    case HCI_BLE_SET_PRIVACY_MODE:
+        btm_ble_set_privacy_mode_complete(p, evt_len);
+        break;
+#endif // #if (defined BLE_PRIVACY_SPT && BLE_PRIVACY_SPT == TRUE)
 #if (BLE_50_FEATURE_SUPPORT == TRUE)
     case HCI_BLE_SET_EXT_ADV_PARAM:
     case HCI_BLE_SET_EXT_ADV_DATA:
@@ -1128,7 +1135,6 @@ static void btu_hcif_hdl_command_complete (UINT16 opcode, UINT8 *p, UINT16 evt_l
         break;
     }
 #endif // #if (BLE_FEAT_PERIODIC_ADV_SYNC_TRANSFER == TRUE)
-#endif
 #endif /* (BLE_INCLUDED == TRUE) */
 
     default: {
@@ -1365,6 +1371,9 @@ static void btu_hcif_hdl_command_status (UINT16 opcode, UINT8 status, UINT8 *p_c
                 break;
 
 #if BLE_INCLUDED == TRUE
+#if (BLE_50_FEATURE_SUPPORT == TRUE)
+            case HCI_BLE_EXT_CREATE_CONN:
+#endif // #if (BLE_50_FEATURE_SUPPORT == TRUE)
             case HCI_BLE_CREATE_LL_CONN:
                 btm_ble_create_ll_conn_complete(status);
                 break;
@@ -1457,7 +1466,6 @@ static void btu_hcif_command_status_evt(uint8_t status, BT_HDR *command, void *c
     hack->context = context;
 
     event->event = BTU_POST_TO_TASK_NO_GOOD_HORRIBLE_HACK;
-
     if (btu_task_post(SIG_BTU_HCI_MSG, event, OSI_THREAD_MAX_TIMEOUT) == false) {
         osi_free(event);
     }
@@ -2146,7 +2154,9 @@ static void btu_ble_ext_adv_report_evt(UINT8 *p, UINT16 evt_len)
 {
     tBTM_BLE_EXT_ADV_REPORT ext_adv_report = {0};
     UINT8 num_reports = {0};
+#if (defined BLE_PRIVACY_SPT && BLE_PRIVACY_SPT == TRUE)
     UINT8 *pp = p;
+#endif
     //UINT8 legacy_event_type = 0;
     UINT16 evt_type = 0;
     uint8_t addr_type;
@@ -2332,6 +2342,21 @@ static void btu_ble_scan_req_received_evt(UINT8 *p)
     STREAM_TO_BDADDR(req_received.scan_addr, p);
 
     btm_ble_scan_req_received_evt(&req_received);
+}
+
+static void btu_ble_channel_select_alg_evt(UINT8 *p)
+{
+    tBTM_BLE_CHANNEL_SEL_ALG chan_sel_alg = {0};
+
+    if (!p) {
+        HCI_TRACE_ERROR("%s, Invalid params.", __func__);
+        return;
+    }
+
+    STREAM_TO_UINT16(chan_sel_alg.conn_handle, p);
+    STREAM_TO_UINT8(chan_sel_alg.channel_sel_alg, p);
+
+    btm_ble_channel_select_algorithm_evt(&chan_sel_alg);
 }
 #endif // #if (BLE_50_FEATURE_SUPPORT == TRUE)
 

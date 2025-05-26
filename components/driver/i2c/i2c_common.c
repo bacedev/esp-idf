@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -37,7 +37,7 @@ typedef struct i2c_platform_t {
 
 static i2c_platform_t s_i2c_platform = {}; // singleton platform
 
-static esp_err_t s_i2c_bus_handle_aquire(i2c_port_num_t port_num, i2c_bus_handle_t *i2c_new_bus, i2c_bus_mode_t mode)
+static esp_err_t s_i2c_bus_handle_acquire(i2c_port_num_t port_num, i2c_bus_handle_t *i2c_new_bus, i2c_bus_mode_t mode)
 {
 #if CONFIG_I2C_ENABLE_DEBUG_LOG
     esp_log_level_set(TAG, ESP_LOG_DEBUG);
@@ -56,9 +56,13 @@ static esp_err_t s_i2c_bus_handle_aquire(i2c_port_num_t port_num, i2c_bus_handle
             bus->bus_mode = mode;
 
             // Enable the I2C module
-            periph_module_enable(i2c_periph_signal[port_num].module);
-            periph_module_reset(i2c_periph_signal[port_num].module);
-            i2c_hal_init(&bus->hal, port_num);
+            I2C_RCC_ATOMIC() {
+                i2c_ll_enable_bus_clock(bus->port_num, true);
+                i2c_ll_reset_register(bus->port_num);
+            }
+            I2C_CLOCK_SRC_ATOMIC() {
+                i2c_hal_init(&bus->hal, port_num);
+            }
         }
     } else {
         ESP_LOGE(TAG, "I2C bus id(%d) has already been acquired", port_num);
@@ -76,7 +80,7 @@ static esp_err_t s_i2c_bus_handle_aquire(i2c_port_num_t port_num, i2c_bus_handle
     return ret;
 }
 
-static bool i2c_bus_occupied(i2c_port_num_t port_num)
+bool i2c_bus_occupied(i2c_port_num_t port_num)
 {
     return s_i2c_platform.buses[port_num] != NULL;
 }
@@ -91,7 +95,7 @@ esp_err_t i2c_acquire_bus_handle(i2c_port_num_t port_num, i2c_bus_handle_t *i2c_
         for (int i = 0; i < SOC_I2C_NUM; i++) {
             bus_occupied = i2c_bus_occupied(i);
             if (bus_occupied == false) {
-                ret = s_i2c_bus_handle_aquire(i, i2c_new_bus, mode);
+                ret = s_i2c_bus_handle_acquire(i, i2c_new_bus, mode);
                 if (ret != ESP_OK) {
                     ESP_LOGE(TAG, "acquire bus failed");
                     _lock_release(&s_i2c_platform.mutex);
@@ -104,7 +108,7 @@ esp_err_t i2c_acquire_bus_handle(i2c_port_num_t port_num, i2c_bus_handle_t *i2c_
         }
         ESP_RETURN_ON_FALSE((bus_found == true), ESP_ERR_NOT_FOUND, TAG, "acquire bus failed, no free bus");
     } else {
-        ret = s_i2c_bus_handle_aquire(port_num, i2c_new_bus, mode);
+        ret = s_i2c_bus_handle_acquire(port_num, i2c_new_bus, mode);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "acquire bus failed");
         }
@@ -131,7 +135,9 @@ esp_err_t i2c_release_bus_handle(i2c_bus_handle_t i2c_bus)
                 ESP_RETURN_ON_ERROR(esp_pm_lock_delete(i2c_bus->pm_lock), TAG, "delete pm_lock failed");
             }
             // Disable I2C module
-            periph_module_disable(i2c_periph_signal[port_num].module);
+            I2C_RCC_ATOMIC() {
+                i2c_ll_enable_bus_clock(port_num, false);
+            }
             free(i2c_bus);
         }
     }

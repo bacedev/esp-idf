@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2023-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -11,6 +11,12 @@
 
 #ifdef SOC_KEY_MANAGER_SUPPORTED
 #include "soc/keymng_reg.h" // TODO: IDF-7901
+#endif
+
+#if CONFIG_HAL_ECDSA_GEN_SIG_CM
+#include "esp_fault.h"
+#include "esp_random.h"
+#include "soc/chip_revision.h"
 #endif
 
 #define ECDSA_HAL_P192_COMPONENT_LEN        24
@@ -39,23 +45,9 @@ bool ecdsa_hal_get_operation_result(void)
     return ecdsa_ll_get_operation_result();
 }
 
-void ecdsa_hal_gen_signature(ecdsa_hal_config_t *conf, const uint8_t *hash,
-                            uint8_t *r_out, uint8_t *s_out, uint16_t len)
+static void ecdsa_hal_gen_signature_inner(const uint8_t *hash, uint8_t *r_out,
+                              uint8_t *s_out, uint16_t len)
 {
-    if (len != ECDSA_HAL_P192_COMPONENT_LEN && len != ECDSA_HAL_P256_COMPONENT_LEN) {
-        HAL_ASSERT(false && "Incorrect length");
-    }
-
-    if (conf->sha_mode == ECDSA_Z_USER_PROVIDED && hash == NULL) {
-        HAL_ASSERT(false && "Mismatch in SHA configuration");
-    }
-
-    if (ecdsa_ll_get_state() != ECDSA_STATE_IDLE) {
-        HAL_ASSERT(false && "Incorrect ECDSA state");
-    }
-
-    configure_ecdsa_periph(conf);
-
     ecdsa_ll_set_stage(ECDSA_STAGE_START_CALC);
 
     while(ecdsa_ll_get_state() != ECDSA_STATE_LOAD) {
@@ -78,6 +70,71 @@ void ecdsa_hal_gen_signature(ecdsa_hal_config_t *conf, const uint8_t *hash,
     while (ecdsa_ll_get_state() != ECDSA_STATE_IDLE) {
         ;
     }
+}
+
+#if CONFIG_HAL_ECDSA_GEN_SIG_CM
+__attribute__((optimize("O0"))) static void ecdsa_hal_gen_signature_with_countermeasure(const uint8_t *hash, uint8_t *r_out,
+                       uint8_t *s_out, uint16_t len)
+{
+    uint8_t tmp_r_out[32] = {};
+    uint8_t tmp_s_out[32] = {};
+    uint8_t tmp_hash[64] = {};
+
+    uint8_t dummy_op_count_prior = esp_random() % ECDSA_SIGN_MAX_DUMMY_OP_COUNT;
+    uint8_t dummy_op_count_later = ECDSA_SIGN_MAX_DUMMY_OP_COUNT - dummy_op_count_prior;
+    ESP_FAULT_ASSERT((dummy_op_count_prior != 0) || (dummy_op_count_later != 0));
+    ESP_FAULT_ASSERT(dummy_op_count_prior + dummy_op_count_later == ECDSA_SIGN_MAX_DUMMY_OP_COUNT);
+
+    esp_fill_random(tmp_hash, 64);
+    /* Dummy ecdsa signature operations prior to the actual one */
+    for (int i = 0; i < dummy_op_count_prior; i++) {
+        ecdsa_hal_gen_signature_inner(tmp_hash + ((6 * i) % 32), (uint8_t *) tmp_r_out, (uint8_t *) tmp_s_out, len);
+    }
+
+    /* Actual ecdsa signature operation */
+    ecdsa_hal_gen_signature_inner(hash, r_out, s_out, len);
+
+    /* Dummy ecdsa signature operations after the actual one */
+    for (int i = 0; i < dummy_op_count_later; i++) {
+        ecdsa_hal_gen_signature_inner(tmp_hash + ((6 * i) % 32), (uint8_t *)tmp_r_out, (uint8_t *)tmp_s_out, len);
+    }
+
+}
+#endif /* CONFIG_HAL_ECDSA_GEN_SIG_CM */
+
+
+
+void ecdsa_hal_gen_signature(ecdsa_hal_config_t *conf, const uint8_t *hash,
+                        uint8_t *r_out, uint8_t *s_out, uint16_t len)
+{
+    if (len != ECDSA_HAL_P192_COMPONENT_LEN && len != ECDSA_HAL_P256_COMPONENT_LEN) {
+        HAL_ASSERT(false && "Incorrect length");
+    }
+
+    if (conf->sha_mode == ECDSA_Z_USER_PROVIDED && hash == NULL) {
+        HAL_ASSERT(false && "Mismatch in SHA configuration");
+    }
+
+    if (ecdsa_ll_get_state() != ECDSA_STATE_IDLE) {
+        HAL_ASSERT(false && "Incorrect ECDSA state");
+    }
+
+    configure_ecdsa_periph(conf);
+
+#if CONFIG_HAL_ECDSA_GEN_SIG_CM
+#if CONFIG_IDF_TARGET_ESP32H2
+    if (!ESP_CHIP_REV_ABOVE(efuse_hal_chip_revision(), 102)) {
+        ecdsa_hal_gen_signature_with_countermeasure(hash, r_out, s_out, len);
+    } else {
+        ecdsa_hal_gen_signature_inner(hash, r_out, s_out, len);
+    }
+#else
+    ecdsa_hal_gen_signature_with_countermeasure(hash, r_out, s_out, len);
+#endif
+#else /* CONFIG_HAL_ECDSA_GEN_SIG_CM */
+    ecdsa_hal_gen_signature_inner(hash, r_out, s_out, len);
+#endif /* !CONFIG_HAL_ECDSA_GEN_SIG_CM */
+
 }
 
 int ecdsa_hal_verify_signature(ecdsa_hal_config_t *conf, const uint8_t *hash, const uint8_t *r, const uint8_t *s,

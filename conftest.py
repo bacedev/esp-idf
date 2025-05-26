@@ -20,7 +20,6 @@ import os
 import re
 import sys
 from copy import deepcopy
-from datetime import datetime
 from typing import Callable, Optional
 
 import pytest
@@ -28,20 +27,19 @@ from _pytest.config import Config
 from _pytest.fixtures import FixtureRequest
 from pytest_embedded.plugin import multi_dut_argument, multi_dut_fixture
 from pytest_embedded_idf.dut import IdfDut
+from pytest_embedded_idf.unity_tester import CaseTester
 
 try:
     from idf_ci_utils import IDF_PATH
     from idf_pytest.constants import DEFAULT_SDKCONFIG, ENV_MARKERS, SPECIAL_MARKERS, TARGET_MARKERS
     from idf_pytest.plugin import IDF_PYTEST_EMBEDDED_KEY, IdfPytestEmbedded
     from idf_pytest.utils import format_case_id, get_target_marker_from_expr
-    from idf_unity_tester import CaseTester
 except ImportError:
     sys.path.append(os.path.join(os.path.dirname(__file__), 'tools', 'ci'))
     from idf_ci_utils import IDF_PATH
     from idf_pytest.constants import DEFAULT_SDKCONFIG, ENV_MARKERS, SPECIAL_MARKERS, TARGET_MARKERS
     from idf_pytest.plugin import IDF_PYTEST_EMBEDDED_KEY, IdfPytestEmbedded
     from idf_pytest.utils import format_case_id, get_target_marker_from_expr
-    from idf_unity_tester import CaseTester
 
 try:
     import common_test_methods  # noqa: F401
@@ -58,20 +56,15 @@ def idf_path() -> str:
     return os.path.dirname(__file__)
 
 
-@pytest.fixture(scope='session', autouse=True)
-def session_tempdir() -> str:
-    _tmpdir = os.path.join(
-        os.path.dirname(__file__),
-        'pytest_embedded_log',
-        datetime.now().strftime('%Y-%m-%d_%H-%M-%S'),
-    )
-    os.makedirs(_tmpdir, exist_ok=True)
-    return _tmpdir
+@pytest.fixture(scope='session')
+def session_root_logdir(idf_path: str) -> str:
+    """Session scoped log dir for pytest-embedded"""
+    return idf_path
 
 
 @pytest.fixture
-def case_tester(dut: IdfDut, **kwargs):  # type: ignore
-    yield CaseTester(dut, **kwargs)
+def case_tester(unity_tester: CaseTester) -> CaseTester:
+    return unity_tester
 
 
 @pytest.fixture
@@ -187,7 +180,7 @@ def check_performance(idf_path: str) -> Callable[[str, float, str], None]:
         """
 
         def _find_perf_item(operator: str, path: str) -> float:
-            with open(path, 'r') as f:
+            with open(path, 'r', encoding='utf-8') as f:
                 data = f.read()
             match = re.search(r'#define\s+IDF_PERFORMANCE_{}_{}\s+([\d.]+)'.format(operator, item.upper()), data)
             return float(match.group(1))  # type: ignore

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -49,6 +49,11 @@ typedef struct {
         lp_uart_sclk_t lp_source_clk;       /*!< LP_UART source clock selection */
 #endif
     };
+    struct {
+        uint32_t backup_before_sleep: 1;    /*!< If set, the driver will backup/restore the HP UART registers before entering/after exiting sleep mode.
+                                                 By this approach, the system can power off HP UART's power domain.
+                                                 This can save power, but at the expense of more RAM being consumed */
+    } flags;                                /*!< Configuration flags */
 } uart_config_t;
 
 /**
@@ -396,8 +401,10 @@ esp_err_t uart_enable_tx_intr(uart_port_t uart_num, int enable, int thresh);
  *       RX pin binded to a GPIO through the GPIO matrix, whereas TX is binded
  *       to its GPIO through the IOMUX.
  *
- * @note Internal signal can be output to multiple GPIO pads.
- *       Only one GPIO pad can connect with input signal.
+ * @note It is possible to configure TX and RX to share the same IO (single wire mode),
+ *       but please be aware of output conflict, which could damage the pad.
+ *       Apply open-drain and pull-up to the pad ahead of time as a protection,
+ *       or the upper layer protocol must guarantee no output from two ends at the same time.
  *
  * @param uart_num   UART port number, the max port number is (UART_NUM_MAX -1).
  * @param tx_io_num  UART TX pin GPIO number.

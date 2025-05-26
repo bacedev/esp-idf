@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2023 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -641,9 +641,11 @@ static bool init_common_tcp_transport(esp_http_client_handle_t client, const esp
     }
 
     if (config->if_name) {
-        client->if_name = calloc(1, sizeof(struct ifreq));
-        ESP_RETURN_ON_FALSE(client->if_name, false, TAG, "Memory exhausted");
-        memcpy(client->if_name, config->if_name, sizeof(struct ifreq));
+        if (client->if_name == NULL) {
+            client->if_name = calloc(1, sizeof(struct ifreq));
+            ESP_RETURN_ON_FALSE(client->if_name, false, TAG, "Memory exhausted");
+            memcpy(client->if_name, config->if_name, sizeof(struct ifreq));
+        }
         esp_transport_tcp_set_interface_name(transport, client->if_name);
     }
     return true;
@@ -929,9 +931,19 @@ esp_err_t esp_http_client_set_redirection(esp_http_client_handle_t client)
     return err;
 }
 
+esp_err_t esp_http_client_reset_redirect_counter(esp_http_client_handle_t client)
+{
+    if (client == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    client->redirect_counter = 0;
+    return ESP_OK;
+}
+
 static esp_err_t esp_http_check_response(esp_http_client_handle_t client)
 {
     if (client->response->status_code >= HttpStatus_Ok && client->response->status_code < HttpStatus_MultipleChoices) {
+        client->redirect_counter = 0;
         return ESP_OK;
     }
     if (client->redirect_counter >= client->max_redirection_count) {
@@ -1180,15 +1192,15 @@ int esp_http_client_read(esp_http_client_handle_t client, char *buffer, int len)
         ESP_LOGD(TAG, "need_read=%d, byte_to_read=%d, rlen=%d, ridx=%d", need_read, byte_to_read, rlen, ridx);
 
         if (rlen <= 0) {
+            esp_log_level_t sev = ESP_LOG_WARN;
+            /* Check for cleanly closed connection */
+            if (rlen == ERR_TCP_TRANSPORT_CONNECTION_CLOSED_BY_FIN && client->response->is_chunked) {
+                /* Explicit call to parser for invoking `message_complete` callback */
+                http_parser_execute(client->parser, client->parser_settings, res_buffer->data, 0);
+                /* ...and lowering the message severity, as closed connection from server side is expected in chunked transport */
+                sev = ESP_LOG_DEBUG;
+            }
             if (errno != 0) {
-                esp_log_level_t sev = ESP_LOG_WARN;
-                /* Check for cleanly closed connection */
-                if (rlen == ERR_TCP_TRANSPORT_CONNECTION_CLOSED_BY_FIN && client->response->is_chunked) {
-                    /* Explicit call to parser for invoking `message_complete` callback */
-                    http_parser_execute(client->parser, client->parser_settings, res_buffer->data, 0);
-                    /* ...and lowering the message severity, as closed connection from server side is expected in chunked transport */
-                    sev = ESP_LOG_DEBUG;
-                }
                 ESP_LOG_LEVEL(sev, TAG, "esp_transport_read returned:%d and errno:%d ", rlen, errno);
             }
 
@@ -1764,7 +1776,7 @@ esp_err_t esp_http_client_get_url(esp_http_client_handle_t client, char *url, co
         return ESP_ERR_INVALID_ARG;
     }
     if (client->connection_info.host && client->connection_info.scheme && client->connection_info.path) {
-        snprintf(url, len, "%s://%s%s", client->connection_info.scheme, client->connection_info.host, client->connection_info.path);
+        snprintf(url, len, "%s://%s:%d%s", client->connection_info.scheme, client->connection_info.host, client->connection_info.port, client->connection_info.path);
         return ESP_OK;
     } else {
         ESP_LOGE(TAG, "Failed to get URL");

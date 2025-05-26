@@ -565,7 +565,7 @@ typedef enum {
      */
     HTTPD_501_METHOD_NOT_IMPLEMENTED,
 
-    /* When HTTP version is not 1.1 */
+    /* When HTTP version is not 1.1 or 1.0*/
     HTTPD_505_VERSION_NOT_SUPPORTED,
 
     /* Returned when http_parser halts parsing due to incorrect
@@ -957,7 +957,7 @@ esp_err_t httpd_req_get_hdr_value_str(httpd_req_t *r, const char *field, char *v
  *
  * @return
  *  - Length    : Query is found in the request URL
- *  - Zero      : Query not found / Null arguments / Invalid request
+ *  - Zero      : Query not found / Null arguments / Invalid request / uri is empty
  */
 size_t httpd_req_get_url_query_len(httpd_req_t *r);
 
@@ -985,6 +985,7 @@ size_t httpd_req_get_url_query_len(httpd_req_t *r);
  *
  * @return
  *  - ESP_OK : Query is found in the request URL and copied to buffer
+ *  - ESP_FAIL                   : uri is empty
  *  - ESP_ERR_NOT_FOUND          : Query not found
  *  - ESP_ERR_INVALID_ARG        : Null arguments
  *  - ESP_ERR_HTTPD_INVALID_REQ  : Invalid HTTP request pointer

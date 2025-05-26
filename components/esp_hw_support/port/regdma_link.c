@@ -445,9 +445,22 @@ static void regdma_link_update_stats_wrapper(void *link, int entry, int depth)
     regdma_link_update_stats(regdma_link_get_stats(link), entry, depth);
 }
 
+static void regdma_link_iterator(void *link, int entry, void (*hook)(void *, int, int))
+{
+    assert(entry < REGDMA_LINK_ENTRY_NUM);
+
+    int iter = 0;
+    while (link) {
+        if (hook) {
+            (*hook)(link, entry, iter++);
+        }
+        link = regdma_link_get_next(link, entry);
+    }
+}
+
 void regdma_link_stats(void *link, int entry)
 {
-    regdma_link_recursive_impl(link, entry, 0, regdma_link_update_stats_wrapper);
+    regdma_link_iterator(link, entry, regdma_link_update_stats_wrapper);
 }
 
 static void regdma_link_destroy_wrapper(void *link, int entry, int depth)
@@ -695,6 +708,12 @@ void * regdma_find_prev_module_link_tail(void *link, void *tail, int entry, uint
         } while ((next = regdma_link_get_next(next, entry)) != NULL);
     }
     return NULL;
+}
+
+regdma_link_mode_t regdma_link_get_config_mode(const regdma_link_config_t *config)
+{
+    assert(config != NULL);
+    return (regdma_link_mode_t)config->head.mode;
 }
 
 #if REGDMA_LINK_DBG

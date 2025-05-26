@@ -187,13 +187,15 @@ struct gatts_profile_inst {
 The Application Profiles are stored in an array and corresponding callback functions `gatts_profile_a_event_handler()` and `gatts_profile_b_event_handler()` are assigned. Different applications on the GATT client use different interfaces, represented by the gatts_if parameter. For initialization, this parameter is set to `ESP_GATT_IF_NONE`, which means that the Application Profile is not linked to any client yet.
 
 ```c
+/* One gatt-based profile one app_id and one gatts_if, this array will store the gatts_if returned by ESP_GATTS_REG_EVT */
 static struct gatts_profile_inst gl_profile_tab[PROFILE_NUM] = {
     [PROFILE_A_APP_ID] = {
         .gatts_cb = gatts_profile_a_event_handler,
-        .gatts_if = ESP_GATT_IF_NONE,
+        .gatts_if = ESP_GATT_IF_NONE,       /* Not get the gatt_if, so initial is ESP_GATT_IF_NONE */
+    },
     [PROFILE_B_APP_ID] = {
-        .gatts_cb = gatts_profile_b_event_handler,
-        .gatts_if = ESP_GATT_IF_NONE,
+        .gatts_cb = gatts_profile_b_event_handler,                   /* This demo does not implement, similar as profile A */
+        .gatts_if = ESP_GATT_IF_NONE,       /* Not get the gatt_if, so initial is ESP_GATT_IF_NONE */
     },
 };
 ```
@@ -647,11 +649,8 @@ The `esp_ble_gap_update_conn_params()` function triggers a GAP event `ESP_GAP_BL
 
 ```c
     case ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT:
-         ESP_LOGI(GATTS_TAG, "update connection params status = %d, min_int = %d, max_int = %d,
-                  conn_int = %d,latency = %d, timeout = %d",
+         ESP_LOGI(GATTS_TAG, "update connection params status = %d, conn_int = %d,latency = %d, timeout = %d",
                   param->update_conn_params.status,
-                  param->update_conn_params.min_int,
-                  param->update_conn_params.max_int,
                   param->update_conn_params.conn_int,
                   param->update_conn_params.latency,
                   param->update_conn_params.timeout);

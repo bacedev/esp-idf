@@ -117,18 +117,22 @@ Setup of OpenOCD
 
 .. highlight:: bash
 
-If you have already set up ESP-IDF with CMake build system according to the :doc:`Getting Started Guide <../../get-started/index>`, then OpenOCD is already installed. After :ref:`setting up the environment <get-started-set-up-env>` in your terminal, you should be able to run OpenOCD. Check this by executing the following command::
+If you have already set up ESP-IDF with CMake build system according to the :doc:`Getting Started Guide <../../get-started/index>`, then OpenOCD is already installed. After :ref:`setting up the environment <get-started-set-up-env>` in your terminal, you should be able to run OpenOCD. Check this by executing the following command:
+
+.. code-block:: none
 
     openocd --version
 
 .. highlight:: none
 
-The output should be as follows (although the version may be more recent than listed here)::
+The output should be as follows (although the version may be more recent than listed here):
 
-    Open On-Chip Debugger  v0.10.0-esp32-20190708 (2019-07-08-11:04)
+.. code-block:: none
+
+    Open On-Chip Debugger v0.12.0-esp32-20240318 (2024-03-18-18:25)
     Licensed under GNU GPL v2
     For bug reports, read
-        https://openocd.org/doc/doxygen/bugs.html
+            http://openocd.org/doc/doxygen/bugs.html
 
 You may also verify that OpenOCD knows where its configuration scripts are located by printing the value of ``OPENOCD_SCRIPTS`` environment variable, by typing ``echo $OPENOCD_SCRIPTS`` (for Linux and macOS) or ``echo %OPENOCD_SCRIPTS%`` (for Windows). If a valid path is printed, then OpenOCD is set up correctly.
 
@@ -174,7 +178,7 @@ Once target is configured and connected to computer, you are ready to launch Ope
 
 .. highlight:: bash
 
-Open a terminal and set it up for using the ESP-IDF as described in the :ref:`setting up the environment <get-started-set-up-env>` section of the Getting Started Guide. Then run OpenOCD (this command works on Windows, Linux, and macOS):
+Open a terminal and set it up for using the ESP-IDF as described in the :ref:`setting up the environment <get-started-set-up-env>` section of the Getting Started Guide. To run OpenOCD for a specific board, you must pass the board-specific configuration. The default configuration for the built project can be found in the ``debug_arguments_openocd`` field of the ``build/project_description.json`` file. There is an example to run OpenOCD (this command works on Windows, Linux, and macOS):
 
 .. include:: {IDF_TARGET_PATH_NAME}.inc
    :start-after: run-openocd
@@ -226,6 +230,8 @@ OpenOCD flashing command ``program_esp`` has the following format:
  - ``exit`` - Optional. Finally exit OpenOCD.
  - ``compress`` - Optional. Compress image file before programming.
  - ``encrypt`` - Optional. Encrypt binary before writing to flash. Same functionality with ``idf.py encrypted-flash``
+ - ``no_clock_boost`` - Optional. Disable setting target clock frequency to its maximum possible value before programming. Clock boost is enabled by default.
+ - ``restore_clock`` - Optional. Restore clock frequency to its initial value after programming. Disabled by default.
 
 You are now ready to start application debugging. Follow the steps described in the section below.
 
@@ -274,7 +280,7 @@ Before proceeding to examples, set up your {IDF_TARGET_NAME} target and load it 
 .. _jtag-debugging-building-openocd:
 
 Building OpenOCD from Sources
----------------------------------
+-----------------------------
 
 Please refer to separate documents listed below, that describe build process.
 
@@ -316,7 +322,7 @@ and Windows:
 .. _jtag-debugging-tips-and-quirks:
 
 Tips and Quirks
-------------------
+---------------
 
 This section provides collection of links to all tips and quirks referred to from various parts of this guide.
 
@@ -327,7 +333,7 @@ This section provides collection of links to all tips and quirks referred to fro
 
 
 Related Documents
----------------------
+-----------------
 
 .. toctree::
     :hidden:

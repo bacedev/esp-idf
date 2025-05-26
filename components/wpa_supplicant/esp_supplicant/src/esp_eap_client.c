@@ -196,7 +196,7 @@ static void wpa2_rxq_deinit(void)
 
 void wpa2_task(void *pvParameters )
 {
-    ETSEvent *e;
+    ETSEvent e;
     struct eap_sm *sm = gEapSm;
     bool task_del = false;
 
@@ -206,16 +206,16 @@ void wpa2_task(void *pvParameters )
 
     for (;;) {
         if ( TRUE == os_queue_recv(s_wpa2_queue, &e, OS_BLOCK) ) {
-            if (e->sig < SIG_WPA2_MAX) {
+            if (e.sig < SIG_WPA2_MAX) {
                 DATA_MUTEX_TAKE();
-                if(sm->wpa2_sig_cnt[e->sig]) {
-                    sm->wpa2_sig_cnt[e->sig]--;
+                if(sm->wpa2_sig_cnt[e.sig]) {
+                    sm->wpa2_sig_cnt[e.sig]--;
                 } else {
-                    wpa_printf(MSG_ERROR, "wpa2_task: invalid sig cnt, sig=%" PRId32 " cnt=%d", e->sig, sm->wpa2_sig_cnt[e->sig]);
+                    wpa_printf(MSG_ERROR, "wpa2_task: invalid sig cnt, sig=%" PRId32 " cnt=%d", e.sig, sm->wpa2_sig_cnt[e.sig]);
                 }
                 DATA_MUTEX_GIVE();
             }
-            switch (e->sig) {
+            switch (e.sig) {
             case SIG_WPA2_TASK_DEL:
                 task_del = true;
                 break;
@@ -235,14 +235,11 @@ void wpa2_task(void *pvParameters )
             default:
                 break;
             }
-            os_free(e);
-        }
-
-        if (task_del) {
-            break;
-        } else {
+            if (task_del) {
+                break;
+            }
             if (s_wifi_wpa2_sync_sem) {
-                wpa_printf(MSG_DEBUG, "EAP: wifi->EAP api completed sig(%" PRId32 ")", e->sig);
+                wpa_printf(MSG_DEBUG, "EAP: wifi->EAP api completed");
                 os_semphr_give(s_wifi_wpa2_sync_sem);
             } else {
                 wpa_printf(MSG_ERROR, "EAP: null wifi->EAP sync sem");
@@ -255,7 +252,7 @@ void wpa2_task(void *pvParameters )
     wpa_printf(MSG_DEBUG, "EAP: task deleted");
     s_wpa2_queue = NULL;
     if (s_wifi_wpa2_sync_sem) {
-        wpa_printf(MSG_DEBUG, "EAP: wifi->EAP api completed sig(%" PRId32 ")", e->sig);
+        wpa_printf(MSG_DEBUG, "EAP: wifi->EAP api completed");
         os_semphr_give(s_wifi_wpa2_sync_sem);
     } else {
         wpa_printf(MSG_ERROR, "EAP: null wifi->EAP sync sem");
@@ -268,6 +265,7 @@ void wpa2_task(void *pvParameters )
 int wpa2_post(uint32_t sig, uint32_t par)
 {
     struct eap_sm *sm = gEapSm;
+    ETSEvent evt;
 
     if (!sm) {
         return ESP_FAIL;
@@ -277,28 +275,20 @@ int wpa2_post(uint32_t sig, uint32_t par)
     if (sm->wpa2_sig_cnt[sig]) {
         DATA_MUTEX_GIVE();
         return ESP_OK;
+    }
+    sm->wpa2_sig_cnt[sig]++;
+    DATA_MUTEX_GIVE();
+    evt.sig = sig;
+    evt.par = par;
+    if (os_queue_send(s_wpa2_queue, &evt, os_task_ms_to_tick(10)) != TRUE) {
+        wpa_printf(MSG_ERROR, "EAP: Q S E");
+        return ESP_FAIL;
+    }
+    if (s_wifi_wpa2_sync_sem) {
+        os_semphr_take(s_wifi_wpa2_sync_sem, OS_BLOCK);
+        wpa_printf(MSG_DEBUG, "EAP: EAP api return, sm->state(%d)", sm->finish_state);
     } else {
-        ETSEvent *evt = (ETSEvent *)os_malloc(sizeof(ETSEvent));
-        if (evt == NULL) {
-            wpa_printf(MSG_ERROR, "EAP: E N M");
-            DATA_MUTEX_GIVE();
-            return ESP_FAIL;
-        }
-        sm->wpa2_sig_cnt[sig]++;
-        DATA_MUTEX_GIVE();
-        evt->sig = sig;
-        evt->par = par;
-        if (os_queue_send(s_wpa2_queue, &evt, os_task_ms_to_tick(10)) != TRUE) {
-            wpa_printf(MSG_ERROR, "EAP: Q S E");
-            return ESP_FAIL;
-        } else {
-            if (s_wifi_wpa2_sync_sem) {
-                os_semphr_take(s_wifi_wpa2_sync_sem, OS_BLOCK);
-                wpa_printf(MSG_DEBUG, "EAP: EAP api return, sm->state(%d)", sm->finish_state);
-            } else {
-                wpa_printf(MSG_ERROR, "EAP: null wifi->EAP sync sem");
-            }
-        }
+        wpa_printf(MSG_ERROR, "EAP: null wifi->EAP sync sem");
     }
     return ESP_OK;
 }
@@ -725,7 +715,7 @@ static int eap_peer_sm_init(void)
 
     gEapSm = sm;
 #ifdef USE_WPA2_TASK
-    s_wpa2_queue = os_queue_create(SIG_WPA2_MAX, sizeof(s_wpa2_queue));
+    s_wpa2_queue = os_queue_create(SIG_WPA2_MAX, sizeof(ETSEvent));
     ret = os_task_create(wpa2_task, "wpa2T", WPA2_TASK_STACK_SIZE, NULL, WPA2_TASK_PRIORITY, &s_wpa2_task_hdl);
     if (ret != TRUE) {
         wpa_printf(MSG_ERROR, "wps enable: failed to create task");
@@ -741,6 +731,7 @@ static int eap_peer_sm_init(void)
 
     wpa_printf(MSG_INFO, "wifi_task prio:%d, stack:%d", WPA2_TASK_PRIORITY, WPA2_TASK_STACK_SIZE);
 #endif
+    sm->workaround = 1;
     return ESP_OK;
 
 _err:
@@ -782,7 +773,7 @@ static void eap_peer_sm_deinit(void)
     }
 
     if (s_wpa2_data_lock) {
-        os_semphr_delete(s_wpa2_data_lock);
+        os_mutex_delete(s_wpa2_data_lock);
         s_wpa2_data_lock = NULL;
         wpa_printf(MSG_DEBUG, "EAP: eap_peer_sm_deinit: free data lock");
     }

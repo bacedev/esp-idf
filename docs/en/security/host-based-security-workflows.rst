@@ -290,6 +290,7 @@ In this case, all the eFuses related to flash encryption are written with help o
         :SOC_EFUSE_DIS_USB_JTAG: - ``DIS_USB_JTAG``: Disable USB switch to JTAG
         :SOC_EFUSE_DIS_PAD_JTAG: - ``DIS_PAD_JTAG``: Disable JTAG permanently
         :not esp32: - ``DIS_DOWNLOAD_MANUAL_ENCRYPT``: Disable UART bootloader encryption access
+        :SOC_FLASH_ENCRYPTION_XTS_AES_SUPPORT_PSEUDO_ROUND: - ``XTS_DPA_PSEUDO_LEVEL``: Enable the pseudo rounds function of the XTS-AES peripheral. The value to be burned in the eFuse can be 1, 2 or 3, denoting the security level. By default ESP-IDF's bootloader configures the value of this eFuse to 1 while enabling flash encryption release mode during boot-up.
 
     The respective eFuses can be burned by running:
 
@@ -428,13 +429,13 @@ In this workflow, we shall use ``espsecure`` tool to generate signing keys and u
 
      .. code:: bash
 
-          espefuse.py --port PORT --chip esp32c2 burn_key KEY_BLOCK0 SECURE_BOOT_DIGEST digest.bin
+          espefuse.py --port PORT --chip esp32c2 burn_key KEY_BLOCK0  digest.bin SECURE_BOOT_DIGEST
 
   .. only:: SOC_EFUSE_REVOKE_BOOT_KEY_DIGESTS
 
       .. code:: bash
 
-          espefuse.py --port PORT --chip {IDF_TARGET_PATH_NAME} burn_key BLOCK SECURE_BOOT_DIGEST0 digest.bin
+          espefuse.py --port PORT --chip {IDF_TARGET_PATH_NAME} burn_key digest.bin BLOCK SECURE_BOOT_DIGEST0 
 
       where ``BLOCK`` is a free keyblock between ``BLOCK_KEY0`` and ``BLOCK_KEY5``.
 

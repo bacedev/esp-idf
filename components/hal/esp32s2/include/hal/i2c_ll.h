@@ -11,6 +11,7 @@
 #include "soc/i2c_periph.h"
 #include "soc/i2c_struct.h"
 #include "soc/clk_tree_defs.h"
+#include "soc/system_reg.h"
 #include "hal/i2c_types.h"
 #include "esp_attr.h"
 #include "hal/misc.h"
@@ -572,7 +573,7 @@ static inline void i2c_ll_get_stop_timing(i2c_dev_t *hw, int *setup_time, int *h
  *
  * @param  hw Beginning address of the peripheral registers
  * @param  ptr Pointer to data buffer
- * @param  len Amount of data needs to be writen
+ * @param  len Amount of data needs to be written
  *
  * @return None.
  */
@@ -657,14 +658,27 @@ static inline void i2c_ll_master_fsm_rst(i2c_dev_t *hw)
  *
  * @param  hw Beginning address of the peripheral registers
  * @param  slave_pulses When I2C master is IDLE, the number of pulses will be sent out.
+ * @param  enable True to start the state machine, otherwise, false
  *
  * @return None
  */
-static inline void i2c_ll_master_clr_bus(i2c_dev_t *hw, uint32_t slave_pulses)
+static inline void i2c_ll_master_clr_bus(i2c_dev_t *hw, uint32_t slave_pulses, bool enable)
 {
     hw->scl_sp_conf.scl_rst_slv_num = slave_pulses;
     hw->scl_sp_conf.scl_rst_slv_en = 0;
     hw->scl_sp_conf.scl_rst_slv_en = 1;
+}
+
+/**
+ * @brief Get the clear bus state
+ *
+ * @param hw Beginning address of the peripheral registers
+ *
+ * @return true: the clear bus not finish, otherwise, false.
+ */
+static inline bool i2c_ll_master_is_bus_clear_done(i2c_dev_t *hw)
+{
+    return false; // not supported on esp32s2
 }
 
 /**
@@ -716,7 +730,7 @@ static inline void i2c_ll_master_init(i2c_dev_t *hw)
  *         Otherwise it is not needed.
  *
  * @param  hw Beginning address of the peripheral registers
- * @param  internal_od_ena Set true to enble internal open-drain, otherwise, set it false.
+ * @param  internal_od_ena Set true to enable internal open-drain, otherwise, set it false.
  *
  * @return None
  */
@@ -757,6 +771,51 @@ static inline void i2c_ll_update(i2c_dev_t *hw)
 {
     ;// ESP32S2 do not support
 }
+
+/**
+ * @brief Enable the bus clock for I2C module
+ *
+ * @param i2c_port I2C port id
+ * @param enable true to enable, false to disable
+ */
+static inline void i2c_ll_enable_bus_clock(int i2c_port, bool enable)
+{
+    if (i2c_port == 0) {
+        uint32_t reg_val = READ_PERI_REG(DPORT_PERIP_CLK_EN0_REG);
+        reg_val &= ~DPORT_I2C_EXT0_CLK_EN_M;
+        reg_val |= enable << DPORT_I2C_EXT0_CLK_EN_S;
+        WRITE_PERI_REG(DPORT_PERIP_CLK_EN0_REG, reg_val);
+    } else if (i2c_port == 1) {
+        uint32_t reg_val = READ_PERI_REG(DPORT_PERIP_CLK_EN0_REG);
+        reg_val &= ~DPORT_I2C_EXT1_CLK_EN_M;
+        reg_val |= enable << DPORT_I2C_EXT1_CLK_EN_S;
+        WRITE_PERI_REG(DPORT_PERIP_CLK_EN0_REG, reg_val);
+    }
+}
+
+/// use a macro to wrap the function, force the caller to use it in a critical section
+/// the critical section needs to declare the __DECLARE_RCC_ATOMIC_ENV variable in advance
+#define i2c_ll_enable_bus_clock(...) do {(void)__DECLARE_RCC_ATOMIC_ENV; i2c_ll_enable_bus_clock(__VA_ARGS__);} while(0)
+
+/**
+ * @brief Reset the I2C module
+ *
+ * @param i2c_port Group ID
+ */
+static inline void i2c_ll_reset_register(int i2c_port)
+{
+    if (i2c_port == 0) {
+        WRITE_PERI_REG(DPORT_PERIP_RST_EN0_REG, DPORT_I2C_EXT0_RST_M);
+        WRITE_PERI_REG(DPORT_PERIP_RST_EN0_REG, 0);
+    } else if (i2c_port == 1) {
+        WRITE_PERI_REG(DPORT_PERIP_RST_EN0_REG, DPORT_I2C_EXT1_RST_M);
+        WRITE_PERI_REG(DPORT_PERIP_RST_EN0_REG, 0);
+    }
+}
+
+/// use a macro to wrap the function, force the caller to use it in a critical section
+/// the critical section needs to declare the __DECLARE_RCC_ATOMIC_ENV variable in advance
+#define i2c_ll_reset_register(...) do {(void)__DECLARE_RCC_ATOMIC_ENV; i2c_ll_reset_register(__VA_ARGS__);} while(0)
 
 /**
  * @brief Set whether slave should auto start, or only start with start signal from master
@@ -848,7 +907,7 @@ typedef enum {
  * @brief  Configure I2C SCL timing
  *
  * @param  hw Beginning address of the peripheral registers
- * @param  high_period The I2C SCL hight period (in core clock cycle, hight_period > 2)
+ * @param  high_period The I2C SCL high period (in core clock cycle, hight_period > 2)
  * @param  low_period The I2C SCL low period (in core clock cycle, low_period > 1)
  * @param  wait_high_period The I2C SCL wait rising edge period.
  *
@@ -1036,7 +1095,7 @@ static inline void i2c_ll_slave_disable_rx_it(i2c_dev_t *hw)
  * @brief  Configure I2C SCL timing
  *
  * @param  hw Beginning address of the peripheral registers
- * @param  hight_period The I2C SCL hight period (in APB cycle, hight_period > 2)
+ * @param  hight_period The I2C SCL high period (in APB cycle, hight_period > 2)
  * @param  low_period The I2C SCL low period (in APB cycle, low_period > 1)
  *
  * @return None.

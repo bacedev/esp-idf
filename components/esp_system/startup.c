@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2015-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2015-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -16,6 +16,7 @@
 #include "sdkconfig.h"
 
 #include "soc/soc_caps.h"
+#include "soc/chip_revision.h"
 #include "hal/wdt_hal.h"
 #include "hal/uart_types.h"
 #include "hal/uart_ll.h"
@@ -37,6 +38,12 @@
 
 /***********************************************/
 // Headers for other components init functions
+
+#if CONFIG_ESP_CRYPTO_FORCE_ECC_CONSTANT_TIME_POINT_MUL
+#include "soc/chip_revision.h"
+#include "hal/efuse_hal.h"
+#endif
+
 #if CONFIG_SW_COEXIST_ENABLE || CONFIG_EXTERNAL_COEX_ENABLE
 #include "private/esp_coexist_internal.h"
 #endif
@@ -366,8 +373,24 @@ static void do_core_init(void)
     if (esp_efuse_find_purpose(ESP_EFUSE_KEY_PURPOSE_ECDSA_KEY, NULL)) {
         // ECDSA key purpose block is present and hence permanently enable
         // the hardware TRNG supplied k mode (most secure mode)
-        err = esp_efuse_write_field_bit(ESP_EFUSE_ECDSA_FORCE_USE_HARDWARE_K);
-        assert(err == ESP_OK && "Failed to enable ECDSA hardware k mode");
+        if (!CONFIG_IDF_TARGET_ESP32H2 || (CONFIG_IDF_TARGET_ESP32H2 && !ESP_CHIP_REV_ABOVE(efuse_hal_chip_revision(), 102))) {
+            err = esp_efuse_write_field_bit(ESP_EFUSE_ECDSA_FORCE_USE_HARDWARE_K);
+            assert(err == ESP_OK && "Failed to enable ECDSA hardware k mode");
+        }
+    }
+#endif
+
+#if CONFIG_ESP_CRYPTO_FORCE_ECC_CONSTANT_TIME_POINT_MUL
+    bool force_constant_time = true;
+#if CONFIG_IDF_TARGET_ESP32H2
+    if (!ESP_CHIP_REV_ABOVE(efuse_hal_chip_revision(), 102)) {
+        force_constant_time = false;
+    }
+#endif
+    if (!esp_efuse_read_field_bit(ESP_EFUSE_ECC_FORCE_CONST_TIME) && force_constant_time) {
+        ESP_EARLY_LOGD(TAG, "Forcefully enabling ECC constant time operations");
+        esp_err_t err = esp_efuse_write_field_bit(ESP_EFUSE_ECC_FORCE_CONST_TIME);
+        assert(err == ESP_OK && "Failed to enable ECC constant time operations");
     }
 #endif
 

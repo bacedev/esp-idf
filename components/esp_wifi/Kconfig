@@ -1,7 +1,7 @@
 
 menu "Wi-Fi"
-    # TODO: Disable WIFI support on ESP32-H2 (WIFI-5796)
-    # visible if SOC_WIFI_SUPPORTED
+
+    visible if SOC_WIFI_SUPPORTED
 
     config ESP_WIFI_ENABLED
         bool
@@ -11,8 +11,8 @@ menu "Wi-Fi"
         int "Max number of WiFi static RX buffers"
         range 2 25 if !SOC_WIFI_HE_SUPPORT
         range 2 128 if SOC_WIFI_HE_SUPPORT
-        default 10 if !SPIRAM_TRY_ALLOCATE_WIFI_LWIP
-        default 16 if SPIRAM_TRY_ALLOCATE_WIFI_LWIP
+        default 10 if !(SPIRAM_TRY_ALLOCATE_WIFI_LWIP && !SPIRAM_IGNORE_NOTFOUND)
+        default 16 if (SPIRAM_TRY_ALLOCATE_WIFI_LWIP && !SPIRAM_IGNORE_NOTFOUND)
         help
             Set the number of WiFi static RX buffers. Each buffer takes approximately 1.6KB of RAM.
             The static rx buffers are allocated when esp_wifi_init is called, they are not freed
@@ -63,7 +63,7 @@ menu "Wi-Fi"
             bool "Static"
         config ESP_WIFI_DYNAMIC_TX_BUFFER
             bool "Dynamic"
-            depends on !SPIRAM_USE_MALLOC
+            depends on !(SPIRAM_TRY_ALLOCATE_WIFI_LWIP && !SPIRAM_IGNORE_NOTFOUND)
     endchoice
 
     config ESP_WIFI_TX_BUFFER_TYPE
@@ -88,8 +88,8 @@ menu "Wi-Fi"
 
     config ESP_WIFI_CACHE_TX_BUFFER_NUM
         int "Max number of WiFi cache TX buffers"
-        depends on SPIRAM
-        range 16 128
+        depends on (SPIRAM_TRY_ALLOCATE_WIFI_LWIP && !SPIRAM_IGNORE_NOTFOUND)
+        range 0 128
         default 32
         help
             Set the number of WiFi cache TX buffer number.
@@ -186,19 +186,19 @@ menu "Wi-Fi"
         depends on ESP_WIFI_AMPDU_RX_ENABLED
         range 2 32 if !SOC_WIFI_HE_SUPPORT
         range 2 64 if SOC_WIFI_HE_SUPPORT
-        default 6 if !SPIRAM_TRY_ALLOCATE_WIFI_LWIP
-        default 16 if SPIRAM_TRY_ALLOCATE_WIFI_LWIP
+        default 6 if !(SPIRAM_TRY_ALLOCATE_WIFI_LWIP && !SPIRAM_IGNORE_NOTFOUND)
+        default 16 if (SPIRAM_TRY_ALLOCATE_WIFI_LWIP && !SPIRAM_IGNORE_NOTFOUND)
         help
             Set the size of WiFi Block Ack RX window. Generally a bigger value means higher throughput and better
             compatibility but more memory. Most of time we should NOT change the default value unless special
             reason, e.g. test the maximum UDP RX throughput with iperf etc. For iperf test in shieldbox, the
-            recommended value is 9~12. If PSRAM is used and WiFi memory is prefered to allocat in PSRAM first,
+            recommended value is 9~12. If PSRAM is used and WiFi memory is preferred to allocate in PSRAM first,
             the default and minimum value should be 16 to achieve better throughput and compatibility with both
             stations and APs.
 
     config ESP_WIFI_AMSDU_TX_ENABLED
         bool "WiFi AMSDU TX"
-        depends on SPIRAM
+        depends on (ESP_WIFI_CACHE_TX_BUFFER_NUM >= 2)
         default n
         help
             Select this option to enable AMSDU TX feature
@@ -249,7 +249,10 @@ menu "Wi-Fi"
         range 6 32
         default 32
         help
-            Set the number of WiFi management short buffer.
+            Set the maximum number of Wi-Fi management short buffers. These buffers are dynamically allocated,
+            with their size determined by the length of the management packet to be sent. When a management
+            packet is less than 64 bytes, the Wi-Fi driver classifies it as a short management packet and
+            assigns it to one of these buffers.
 
     config ESP_WIFI_IRAM_OPT
         bool "WiFi IRAM speed optimization"
@@ -327,17 +330,30 @@ menu "Wi-Fi"
         int "Minimum active time"
         range 8 60
         default 50
-        depends on ESP_WIFI_SLP_IRAM_OPT
         help
-            The minimum timeout for waiting to receive data, unit: milliseconds.
+            Only for station in WIFI_PS_MIN_MODEM or WIFI_PS_MAX_MODEM. When the station enters the active state,
+            it will work for at least ESP_WIFI_SLP_DEFAULT_MIN_ACTIVE_TIME. If a data packet is received or sent
+            during this period, the time will be refreshed. If the time is up, but the station still has packets
+            to receive or send, the time will also be refreshed. unit: milliseconds.
 
     config ESP_WIFI_SLP_DEFAULT_MAX_ACTIVE_TIME
         int "Maximum keep alive time"
         range 10 60
         default 10
-        depends on ESP_WIFI_SLP_IRAM_OPT
         help
-            The maximum time that wifi keep alive, unit: seconds.
+            Only for station in WIFI_PS_MIN_MODEM or WIFI_PS_MAX_MODEM. If no packet has been
+            sent within ESP_WIFI_SLP_DEFAULT_MAX_ACTIVE_TIME, a null data packet will be sent
+            to maintain the connection with the AP. unit: seconds.
+
+    config ESP_WIFI_SLP_DEFAULT_WAIT_BROADCAST_DATA_TIME
+        int "Minimum wait broadcast data time"
+        range 10 30
+        default 15
+        help
+            Only for station in WIFI_PS_MIN_MODEM or WIFI_PS_MAX_MODEM. When the station knows through the beacon
+            that AP will send broadcast packet, it will wait for ESP_WIFI_SLP_DEFAULT_WAIT_BROADCAST_DATA_TIME
+            before entering the sleep process. If a broadcast packet is received with more data bits, the time
+            will refreshed. unit: milliseconds.
 
     config ESP_WIFI_FTM_ENABLE
         bool "WiFi FTM"
@@ -372,7 +388,7 @@ menu "Wi-Fi"
 
     config ESP_WIFI_GMAC_SUPPORT
         bool "WiFi GMAC Support(GMAC128 and GMAC256)"
-        default n
+        default y
         help
             Select this option to enable GMAC support. GMAC support is compulsory for WiFi 192 bit certification.
 

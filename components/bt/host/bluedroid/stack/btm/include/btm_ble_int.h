@@ -212,11 +212,14 @@ typedef struct {
 #define BTM_BLE_MAX_BG_CONN_DEV_NUM    10
 
 typedef struct {
+    UINT16              scan_interval;
+    UINT16              scan_window;
     UINT16              min_conn_int;
     UINT16              max_conn_int;
     UINT16              slave_latency;
     UINT16              supervision_tout;
-
+    UINT16              min_ce_len;
+    UINT16              max_ce_len;
 } tBTM_LE_CONN_PRAMS;
 
 
@@ -313,7 +316,7 @@ typedef struct {
 #define BTM_PRIVACY_NONE    0              /* BLE no privacy */
 #define BTM_PRIVACY_1_1     1              /* BLE privacy 1.1, do not support privacy 1.0 */
 #define BTM_PRIVACY_1_2     2              /* BLE privacy 1.2 */
-#define BTM_PRIVACY_MIXED   3              /* BLE privacy mixed mode, broadcom propietary mode */
+#define BTM_PRIVACY_MIXED   3              /* BLE privacy mixed mode, broadcom proprietary mode */
 typedef UINT8 tBTM_PRIVACY_MODE;
 
 /* data length change event callback */
@@ -377,6 +380,7 @@ typedef struct {
     tBTM_BLE_STATE_MASK cur_states; /* bit mask of tBTM_BLE_STATE */
     UINT8 link_count[2]; /* total link count master and slave*/
     tBTM_UPDATE_DUPLICATE_EXCEPTIONAL_LIST_CMPL_CBACK *update_exceptional_list_cmp_cb;
+    tBTM_SET_CSA_SUPPORT_CMPL_CBACK *set_csa_support_cmpl_cb;
 } tBTM_BLE_CB;
 
 #ifdef __cplusplus
@@ -486,6 +490,7 @@ void btm_ble_refresh_peer_resolvable_private_addr(BD_ADDR pseudo_bda, BD_ADDR rr
 void btm_ble_refresh_local_resolvable_private_addr(BD_ADDR pseudo_addr, BD_ADDR local_rpa);
 void btm_ble_read_resolving_list_entry_complete(UINT8 *p, UINT16 evt_len) ;
 void btm_ble_set_addr_resolution_enable_complete(UINT8 *p, UINT16 evt_len) ;
+void btm_ble_set_rpa_timeout_complete(UINT8 *p, UINT16 evt_len) ;
 void btm_ble_remove_resolving_list_entry_complete(UINT8 *p, UINT16 evt_len);
 void btm_ble_add_resolving_list_entry_complete(UINT8 *p, UINT16 evt_len);
 void btm_ble_clear_resolving_list_complete(UINT8 *p, UINT16 evt_len);
@@ -496,6 +501,7 @@ void btm_ble_enable_resolving_list_for_platform (UINT8 rl_mask);
 void btm_ble_resolving_list_init(UINT8 max_irk_list_sz);
 void btm_ble_resolving_list_cleanup(void);
 void btm_ble_add_default_entry_to_resolving_list(void);
+void btm_ble_set_privacy_mode_complete(UINT8 *p, UINT16 evt_len);
 #endif
 
 void btm_ble_multi_adv_configure_rpa (tBTM_BLE_MULTI_ADV_INST *p_inst);

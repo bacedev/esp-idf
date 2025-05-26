@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: 2021-2024 Espressif Systems (Shanghai) CO LTD
+ * SPDX-FileCopyrightText: 2021-2025 Espressif Systems (Shanghai) CO LTD
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -7,7 +7,6 @@
 #include <stdatomic.h>
 #include "esp_openthread_radio.h"
 
-#include "error.h"
 #include "esp_err.h"
 #include "sdkconfig.h"
 #include "esp_check.h"
@@ -25,12 +24,17 @@
 #include "rom/ets_sys.h"
 
 #include "openthread-core-config.h"
+#include "openthread/error.h"
 #include "openthread/link.h"
 #include "openthread/platform/diag.h"
 #include "openthread/platform/radio.h"
 #include "openthread/platform/time.h"
 #include "utils/link_metrics.h"
 #include "utils/mac_frame.h"
+
+#if (CONFIG_ESP_COEX_SW_COEXIST_ENABLE || CONFIG_EXTERNAL_COEX_ENABLE)
+#include "esp_coex_i154.h"
+#endif
 
 #define ESP_RECEIVE_SENSITIVITY -120
 #define ESP_OPENTHREAD_XTAL_ACCURACY CONFIG_OPENTHREAD_XTAL_ACCURACY
@@ -64,9 +68,12 @@ static otRadioFrame s_ack_frame;
 static int s_ed_power;
 static esp_ieee802154_tx_error_t s_tx_error;
 static int s_radio_event_fd = -1;
-static bool s_diag_mode = false;
 static const char *s_radio_workflow = "radio";
 static uint8_t s_txrx_events;
+
+#if CONFIG_OPENTHREAD_DIAG
+static bool s_diag_mode = false;
+#endif
 
 #if OPENTHREAD_CONFIG_MAC_HEADER_IE_SUPPORT
 static otRadioIeInfo s_transmit_ie_info;
@@ -113,7 +120,7 @@ static inline bool get_event(uint8_t event)
 esp_err_t esp_openthread_radio_init(const esp_openthread_platform_config_t *config)
 {
     ESP_RETURN_ON_FALSE(s_radio_event_fd == -1, ESP_ERR_INVALID_STATE, OT_PLAT_LOG_TAG,
-                        "Radio was initalized already!");
+                        "Radio was initialized already!");
 
     s_radio_event_fd = eventfd(0, EFD_SUPPORT_ISR);
 
@@ -165,7 +172,7 @@ esp_err_t esp_openthread_radio_process(otInstance *aInstance, const esp_openthre
 
     if (get_event(EVENT_TX_DONE)) {
         clr_event(EVENT_TX_DONE);
-#if OPENTHREAD_CONFIG_DIAG_ENABLE
+#if CONFIG_OPENTHREAD_DIAG
         if (otPlatDiagModeGet()) {
             otPlatDiagRadioTransmitDone(aInstance, &s_transmit_frame, OT_ERROR_NONE);
         } else
@@ -183,7 +190,7 @@ esp_err_t esp_openthread_radio_process(otInstance *aInstance, const esp_openthre
 
     if (get_event(EVENT_TX_FAILED)) {
         clr_event(EVENT_TX_FAILED);
-#if OPENTHREAD_CONFIG_DIAG_ENABLE
+#if CONFIG_OPENTHREAD_DIAG
         if (otPlatDiagModeGet()) {
             otPlatDiagRadioTransmitDone(aInstance, &s_transmit_frame, OT_ERROR_CHANNEL_ACCESS_FAILURE);
         } else
@@ -219,7 +226,7 @@ esp_err_t esp_openthread_radio_process(otInstance *aInstance, const esp_openthre
 
     while (atomic_load(&s_recv_queue.used)) {
         if (s_receive_frame[s_recv_queue.head].mPsdu != NULL) {
-#if OPENTHREAD_CONFIG_DIAG_ENABLE
+#if CONFIG_OPENTHREAD_DIAG
             if (otPlatDiagModeGet()) {
                 otPlatDiagRadioReceiveDone(aInstance, &s_receive_frame[s_recv_queue.head], OT_ERROR_NONE);
             } else
@@ -302,7 +309,7 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aFrame)
 {
     esp_ieee802154_set_channel(aFrame->mChannel);
 
-    aFrame->mPsdu[-1] = aFrame->mLength; // lenth locates one byte before the psdu (esp_openthread_radio_tx_psdu);
+    aFrame->mPsdu[-1] = aFrame->mLength; // length locates one byte before the psdu (esp_openthread_radio_tx_psdu);
 
     if (otMacFrameIsSecurityEnabled(aFrame) && !aFrame->mInfo.mTxInfo.mIsSecurityProcessed) {
         if (!s_transmit_frame.mInfo.mTxInfo.mIsARetx) {
@@ -409,7 +416,8 @@ void otPlatRadioClearSrcMatchExtEntries(otInstance *aInstance)
 
 otError otPlatRadioEnergyScan(otInstance *aInstance, uint8_t aScanChannel, uint16_t aScanDuration)
 {
-    esp_ieee802154_energy_detect(aScanDuration);
+    esp_ieee802154_set_channel(aScanChannel);
+    esp_ieee802154_energy_detect(aScanDuration * US_PER_MS / US_PER_SYMBLE);
 
     return OT_ERROR_NONE;
 }
@@ -447,6 +455,15 @@ int8_t otPlatRadioGetReceiveSensitivity(otInstance *aInstance)
     return ESP_RECEIVE_SENSITIVITY;
 }
 
+#if CONFIG_OPENTHREAD_DIAG
+
+void otPlatDiagSetOutputCallback(otInstance *aInstance, otPlatDiagOutputCallback aCallback, void *aContext)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aCallback);
+    OT_UNUSED_VARIABLE(aContext);
+}
+
 void otPlatDiagModeSet(bool mode)
 {
     s_diag_mode = mode;
@@ -478,6 +495,8 @@ void otPlatDiagAlarmCallback(otInstance *aInstance)
 {
     OT_UNUSED_VARIABLE(aInstance);
 }
+
+#endif // CONFIG_OPENTHREAD_DIAG
 
 #if OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2
 void otPlatRadioSetMacKey(otInstance *aInstance, uint8_t aKeyIdMode, uint8_t aKeyId, const otMacKeyMaterial *aPrevKey,
@@ -781,5 +800,29 @@ void otPlatRadioSetRxOnWhenIdle(otInstance *aInstance, bool aEnable)
 {
     OT_UNUSED_VARIABLE(aInstance);
     esp_ieee802154_set_rx_when_idle(aEnable);
+}
+#endif
+
+uint32_t otPlatRadioGetPreferredChannelMask(otInstance *aInstance)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    return CONFIG_OPENTHREAD_PREFERRED_CHANNEL_MASK;
+}
+
+uint32_t otPlatRadioGetSupportedChannelMask(otInstance *aInstance)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    return CONFIG_OPENTHREAD_SUPPORTED_CHANNEL_MASK;
+}
+
+#if (CONFIG_ESP_COEX_SW_COEXIST_ENABLE || CONFIG_EXTERNAL_COEX_ENABLE)
+void esp_openthread_set_coex_config(esp_ieee802154_coex_config_t config)
+{
+    esp_ieee802154_set_coex_config(config);
+}
+
+esp_ieee802154_coex_config_t esp_openthread_get_coex_config(void)
+{
+    return esp_ieee802154_get_coex_config();
 }
 #endif
