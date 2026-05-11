@@ -787,8 +787,7 @@ static esp_err_t esp_ota_current_ota_is_workable(bool valid)
             if (err != ESP_OK) {
                 return err;
             }
-            ESP_LOGI(TAG, "Rollback to previously worked partition. Restart.");
-            esp_restart();
+            ESP_LOGI(TAG, "Rollback to previously worked partition.");
         }
     } else {
         ESP_LOGE(TAG, "Running firmware is factory");
@@ -802,9 +801,78 @@ esp_err_t esp_ota_mark_app_valid_cancel_rollback(void)
     return esp_ota_current_ota_is_workable(true);
 }
 
-esp_err_t esp_ota_mark_app_invalid_rollback_and_reboot(void)
+esp_err_t esp_ota_mark_app_invalid_rollback(void)
 {
     return esp_ota_current_ota_is_workable(false);
+}
+
+esp_err_t esp_ota_mark_app_invalid_rollback_and_reboot(void)
+{
+    esp_err_t ret = esp_ota_mark_app_invalid_rollback();
+    if (ret == ESP_OK) {
+        esp_restart();
+    }
+    return ret;
+}
+
+static int get_otadata_index_for_partition(const esp_partition_t *partition, const esp_ota_select_entry_t *otadata, int ota_app_count)
+{
+    if (!is_ota_partition(partition) || otadata == NULL || ota_app_count == 0) {
+        return -1;
+    }
+
+    int req_ota_slot = partition->subtype - ESP_PARTITION_SUBTYPE_APP_OTA_MIN;
+    for (int i = 0; i < 2; ++i) {
+        if (otadata[i].ota_seq == UINT32_MAX || otadata[i].crc != bootloader_common_ota_select_crc(&otadata[i])) {
+            continue;
+        }
+        int ota_slot = (otadata[i].ota_seq - 1) % ota_app_count;
+        if (ota_slot == req_ota_slot) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+esp_err_t esp_ota_mark_running_partition_valid(void)
+{
+    esp_ota_select_entry_t otadata[2];
+    const esp_partition_t *otadata_partition = read_otadata(otadata);
+    if (otadata_partition == NULL) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    int ota_app_count = esp_ota_get_app_partition_count();
+    if (ota_app_count == 0) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    const esp_partition_t *running_partition = esp_ota_get_running_partition();
+    if (!is_ota_partition(running_partition)) {
+        ESP_LOGE(TAG, "Running firmware is factory");
+        return ESP_FAIL;
+    }
+
+    int target_otadata = get_otadata_index_for_partition(running_partition, otadata, ota_app_count);
+    if (target_otadata == -1) {
+        ESP_LOGE(TAG, "No otadata entry found for running partition");
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (otadata[target_otadata].ota_state != ESP_OTA_IMG_VALID) {
+        otadata[target_otadata].ota_state = ESP_OTA_IMG_VALID;
+        ESP_LOGD(TAG, "Running OTA partition is marked as VALID");
+        esp_err_t err = rewrite_ota_seq(otadata, otadata[target_otadata].ota_seq, target_otadata, otadata_partition);
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+
+#ifdef CONFIG_BOOTLOADER_APP_ANTI_ROLLBACK
+    return esp_ota_set_anti_rollback();
+#else
+    return ESP_OK;
+#endif
 }
 
 static bool check_invalid_otadata (const esp_ota_select_entry_t *s) {
